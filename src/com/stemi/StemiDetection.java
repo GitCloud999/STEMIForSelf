@@ -10,17 +10,231 @@ import java.util.stream.IntStream;
 public class StemiDetection {
 
     public void detectStemi(CardiacStruct cardiacStruct, double fs, OnResultCompleteListener onResultCompleteListener,
-                            TwelveLeadEcgData twelveLeadEcgData, HashMap<String, Double> map, Utility ut) {
+                            TwelveLeadEcgData twelveLeadEcgData, HashMap<String, Double> map, Utility ut, String arrhythmiaResult) {
         StemiCalculationData stemiData = detectStemiPrivate(cardiacStruct, ut);
         HashMap<String, Object> stemiResults = classifyStemi(stemiData);
-        stemiDecissionMaker(stemiResults);
+        String stemiResult = stemiDecissionMaker(stemiResults);
         IschemiaDetection ischemiaDetection = new IschemiaDetection();
         IschemiaData ischemiaData = ischemiaDetection.detectIschemia(cardiacStruct, fs, stemiData, ut);
-        ischemiaDetection.classifyIschemia(ischemiaData, stemiData.getSTElevationMv());
+        String ischemiaResult = ischemiaDetection.classifyIschemia(ischemiaData, stemiData.getSTElevationMv());
+        onResultCompleteListener.onCompletedLead2MetaData(twelveLeadEcgData, map, arrhythmiaResult, stemiResult, ischemiaResult);
+    }
+
+    private StemiCalculationData detectStemiPrivate(CardiacStruct cardiacStruct, Utility ut) {
+        StemiCalculationData stemiData = new StemiCalculationData();
+        String[] leadAlias = {"Lead1", "Lead2", "Lead3", "V1", "V2", "V3", "V4", "V5", "V6"};
+        for (int i = 0; i < 9; i++) {
+            CardiacData data = cardiacStruct.getLeadWiseCardiacStructLeadRangeFrom0To8(i);
+            stemiData.addLeadName(leadAlias[i]);
+//            stemiData.addsTElevationMv( ut.median(data.getStElevation().stream().mapToDouble(Double::doubleValue).toArray()));
+//            stemiData.addSagittaMv(ut.median(data.getStSagitaMv().stream().mapToDouble(Double::doubleValue).toArray()));
+//            stemiData.addStMorphCode((int) ut.median(data.getStMorphologyCode()));
+//            stemiData.addTombstoneFlag(ut.medianBoolean(data.getStTombstoneFlag()));
+//            stemiData.addQrsDuration(ut.median(data.getQrsDuration()));
+//            stemiData.addTAmplitude( ut.findMean(data.getTAmplitudeMv()) );
+//            stemiData.addRAmplitude( ut.median(data.getRAmplitudeMv().stream().mapToDouble(Double::doubleValue).toArray()) );
+//            stemiData.addSAmplitude( ut.median(data.getSAmplitudeMv().stream().mapToDouble(Double::doubleValue).toArray()) );
+//            stemiData.addQAmplitude( ut.median(data.getQAmplitudeMv().stream().mapToDouble(Double::doubleValue).toArray()));
+
+            stemiData.addsTElevationMv( ut.findMax(data.getStElevation().stream().mapToDouble(Double::doubleValue).toArray()));
+            stemiData.addSagittaMv(ut.median(data.getStSagitaMv().stream().mapToDouble(Double::doubleValue).toArray()));
+            stemiData.addStMorphCode((int) ut.median(data.getStMorphologyCode()));
+            stemiData.addTombstoneFlag(data.getStTombstoneFlag().contains(true)? 1 : 0);
+            stemiData.addQrsDuration(ut.median(data.getQrsDuration()));
+            stemiData.addTAmplitude( ut.medianDouble(data.getTAmplitudeMv()) );
+            stemiData.addRAmplitude( ut.median(data.getRAmplitudeMv().stream().mapToDouble(Double::doubleValue).toArray()) );
+            stemiData.addSAmplitude( ut.median(data.getSAmplitudeMv().stream().mapToDouble(Double::doubleValue).toArray()) );
+            stemiData.addQAmplitude( ut.median(data.getQAmplitudeMv().stream().mapToDouble(Double::doubleValue).toArray()));
+
+
+        }
+        //  Territory groups with available labels
+        String[] septal = {"V1","V2"};
+        String[] anterior = {"V3","V4"};
+        String[] lateral = {"Lead1","V5","V6"};
+        String[] inferior = {"Lead2","Lead3"};
+        String[] preCordialLeads = {"V1","V2","V3","V4","V5","V6"};
+        double[] thr = new double[stemiData.getLeadName().size()];
+        for (int i = 0; i < stemiData.getLeadName().size(); i++) {
+            if (stemiData.getLeadName(i).equalsIgnoreCase(preCordialLeads[0]) || stemiData.getLeadName(i).
+                    equalsIgnoreCase(preCordialLeads[1]) || stemiData.getLeadName(i).equalsIgnoreCase(
+                    preCordialLeads[2]) || stemiData.getLeadName(i).equalsIgnoreCase(preCordialLeads[3]) ||
+                    stemiData.getLeadName(i).equalsIgnoreCase(preCordialLeads[4]) || stemiData.getLeadName(i).
+                    equalsIgnoreCase(preCordialLeads[5])
+            )
+                thr[i] = 0.2;
+            else
+                thr[i] = 0.1;
+        }
+        int[] stElevationFlag = IntStream.range(0, stemiData.getLeadName().size()).map(i-> (stemiData.
+                getsTElevationMv(i) >= thr[i]) ? 1:0).toArray();
+        int[] stConcaveDown = IntStream.range(0, stemiData.getLeadName().size()).map(i-> ((
+                stemiData.getStMorphCode(i) == -1) || (stemiData.getSagittaMv(i) < -0.05)) ? 1 : 0).toArray();
+        int[] tombstoneStrong = IntStream.range(0, stemiData.getLeadName().size()).map(i->
+                (stemiData.getTombstoneFlag(i) >= 1) ? 1 : 0 ).toArray();
+        int septalContigCounts = stElevationFlag[3] + stElevationFlag[4];
+        int anteriorContigCounts = stElevationFlag[5] + stElevationFlag[6];
+        int lateralContigCounts = stElevationFlag[0] + stElevationFlag[7] + stElevationFlag[8];
+        int inferiorContigCounts = stElevationFlag[1] + stElevationFlag[2];
+        int anteroSeptalContigCounts = stElevationFlag[3] + stElevationFlag[4] + stElevationFlag[5] + stElevationFlag[6];
+        int anteroLateralContigCounts = stElevationFlag[5] + stElevationFlag[6] + stElevationFlag[7] + stElevationFlag[8]
+                + stElevationFlag[0];
+        int inferoLateralContigCounts = stElevationFlag[1] + stElevationFlag[7] + stElevationFlag[8] + stElevationFlag[0];
+        int[] primaryContigCounts = {septalContigCounts, anteriorContigCounts, lateralContigCounts, inferiorContigCounts};
+        int[] allContigCounts = {septalContigCounts, anteriorContigCounts, lateralContigCounts, inferiorContigCounts,
+                anteroSeptalContigCounts, anteroLateralContigCounts, inferoLateralContigCounts};
+        // territoryFlags
+        int septalTerritoryFlags = (septalContigCounts >= 2) ? 1 : 0;
+        int anteriorTerritoryFlags = (anteriorContigCounts >= 2) ? 1 : 0;
+        int lateralTerritoryFlags = (lateralContigCounts >= 2) ? 1 : 0;
+        int inferiorTerritoryFlags = (inferiorContigCounts >= 2) ? 1 : 0;
+        int[] allTerritoryFlags = {septalTerritoryFlags, anteriorTerritoryFlags, lateralTerritoryFlags , inferiorTerritoryFlags};
+        int nElevContiguous = ut.findMax(primaryContigCounts);
+        int anyTerritoryContiguous = ut.findIfAnyNonZero(primaryContigCounts);
+        //Global STEMI heuristic:
+        //% (A) ≥2 elevated in any one territory (contiguity), or
+        //% (B) any elevated lead with strong tombstone morphology
+        int anyTombstoneElev = 0;
+        for (int i = 0; i < stElevationFlag.length; i++) {
+            if (stElevationFlag[i] == 1 && tombstoneStrong[i] == 1)
+                anyTombstoneElev = 1;
+        }
+        int suspicious = (anyTerritoryContiguous == 1 || anyTombstoneElev == 1) ? 1 : 0;
+        for (int i = 0; i < stElevationFlag.length; i++) {
+            stemiData.addStElevationFlag(stElevationFlag[i]);
+            stemiData.addStConcaveDown(stConcaveDown[i]);
+            stemiData.addTombstoneStrong(tombstoneStrong[i]);
+        }
+        stemiData.setNumberOfLeadsElevated(Arrays.stream(stElevationFlag).sum());
+        stemiData.setAnyTombstoneElev( anyTombstoneElev);
+        stemiData.setSuspicious(suspicious);
+        stemiData.setTerritoryCounts(primaryContigCounts);
+        stemiData.setTerritoryContiguous(allTerritoryFlags);
+        stemiData.setAllContigCounts(allContigCounts);
+        String summary = "";
+        if (suspicious == 1)
+            summary += "STEMI suspected ";
+        else
+            summary += "No STEMI pattern flagged; ";
+        summary += "Contiguous-elevated (max territory): "+nElevContiguous+"; ";
+        if (anyTombstoneElev == 1)
+            summary += "Tombstone morphology present; ";
+        summary += "ST ref: ST_Elevation_mV; ";
+        stemiData.setSummary(summary);
+        return  stemiData;
+
+    }
+
+    private HashMap<String, Object> classifyStemi(StemiCalculationData stemiData) {
+        HashMap<String, Object> results = new HashMap<>();
+        int[] allContigCounts = stemiData.getAllContigCounts();
+        int septalCounts = allContigCounts[0];
+        int anteriorCounts = allContigCounts[1];
+        int lateralCounts = allContigCounts[2];
+        int inferiorCounts = allContigCounts[3];
+        int anteroSeptalCounts = allContigCounts[4];
+        int anteroLateralCounts = allContigCounts[5];
+        int inferoLateralCounts = allContigCounts[6];
+//        results.put("territoryScores", allContigCounts);
+        results.put("counts", allContigCounts);
+        ArrayList<Integer> tomb = stemiData.getTombstoneStrong();
+        int tombSeptal = (septalCounts == 1 && tomb.get(0) == 1) ? 1 : 0;
+        int tombAnterior = (anteriorCounts == 1 && tomb.get(1) == 1) ? 1 : 0;
+        int tombLateral = (lateralCounts == 1 && tomb.get(2) == 1) ? 1 : 0;
+        int tombInferior = (inferiorCounts == 1 && tomb.get(3) == 1) ? 1 : 0;
+        int tombAnteroSeptal = (anteroSeptalCounts == 1 && tomb.get(4) == 1) ? 1 : 0;
+        int tombAnteroLateral = (anteroLateralCounts == 1 && tomb.get(5) == 1) ? 1 : 0;
+        int tombInferoLateral = (inferoLateralCounts == 1 && tomb.get(6) == 1) ? 1 : 0;
+        //  Strong categories (≥2 elevated in that group)
+        ArrayList<String> territoryLabels = new ArrayList<String>();
+        if (anteroSeptalCounts >= 2) {
+            territoryLabels.add("Anteroseptal MI " + tombAnteroSeptal + " ");
+        }
+        else {
+            if (septalCounts >= 2)
+                territoryLabels.add("Septal MI "+ tombSeptal +" ");
+            if (anteriorCounts >= 2)
+                territoryLabels.add("Anterior MI " +tombAnterior +" ");
+        }
+
+        if (anteroLateralCounts >= 2)
+            territoryLabels.add("Anterolateral MI " + tombLateral +" ");
+        else {
+            if (lateralCounts >= 2)
+                territoryLabels.add("Lateral MI " +tombLateral+" ");
+        }
+
+        //  Inferior: only lead II → be conservative
+        if (inferiorCounts >= 1) {
+            //    % If also lateral elevated → inferolateral
+            if (inferoLateralCounts >= 2)
+                territoryLabels.add("Inferolateral MI " + tombInferoLateral + " ");
+            else
+                territoryLabels.add("Possible Inferior MI " + tombLateral + " || " + tombInferior + " ");
+        }
+
+        //  If nothing matched but global STEMI suspicion true, give a generic label
+        if (territoryLabels.isEmpty() && stemiData.getSuspicious() == 1)
+            territoryLabels.add("STEMI pattern (territory indeterminate)");
+        //  Use median QRS across all leads (robust)
+        results.put("territoryLabels", territoryLabels);
+        Utility ut = new Utility();
+        double qrsMedian = ut.medianDouble(stemiData.getQrsDuration());
+        String bbb = "None";
+        String bbbReason = "";
+        boolean wideQrs = (qrsMedian >= 100);
+
+        //  Compute R/S ratios (guard against divide-by-zero)
+        double rsRatioV1 = 0, rsRatioV6 = 0;
+        int indexV1 = stemiData.getLeadName().indexOf("V1");
+        int indexV6 = stemiData.getLeadName().indexOf("V6");
+        if (indexV1 != -1 && stemiData.getSAmplitude(indexV1) != 0)
+            rsRatioV1 = Math.abs(stemiData.getRAmplitude(indexV1)) / Math.abs(stemiData.getSAmplitude(indexV1));
+        if (indexV6 != -1 && stemiData.getSAmplitude(indexV6) != 0 )
+            rsRatioV6 = Math.abs(stemiData.getRAmplitude(indexV6)) / Math.abs(stemiData.getSAmplitude(indexV6));
+
+        //  ---- RBBB criteria ----
+        //% Wide QRS + R/S > 1 in V1 + deep S in V6
+        //isRBBBlike = wideQRS && (RS_ratio_V1 > 1) && (~isnan(S_V6) && S_V6 < 0);
+        boolean isRbbbLike = wideQrs && (rsRatioV1 > 1) && stemiData.getSAmplitude(indexV6) < 0;
+        boolean isLbbbLike = wideQrs && ( (stemiData.getRAmplitude(0) > 0) || (stemiData.getRAmplitude(8) > 0) )
+                && (stemiData.getQAmplitude(0) >= -0.02) && (stemiData.getSAmplitude(indexV1) < 0) && (rsRatioV6 > 1);
+
+        if (isLbbbLike && !isRbbbLike) {
+            bbb = "LBBB";
+            bbbReason = "QRS ≥120 ms, R/S(V6) > 1, broad R in I/V6, deep S in V1, absent/small Q in I.";
+        }
+        else if (isRbbbLike && !isLbbbLike) {
+            bbb = "RBBB";
+            bbbReason = "QRS ≥120 ms, R/S(V1) > 1, deep S in V6.";
+        }
+        else if ( wideQrs && (isRbbbLike || isLbbbLike) ) {
+            bbb = "Possible LBBB/RBBB";
+            bbbReason = "Wide QRS with mixed/incomplete R/S patterns.";
+        }
+        //  MI territory line
+        String parts = "";
+        if (!territoryLabels.isEmpty())
+            parts = "MI territory: " + territoryLabels+" ; ";
+        else
+            parts = "MI territory: none assigned"+" ; ";
+        parts += "Counts — Septal:"+ septalCounts +"  Anterior:"+ anteriorCounts +"  Lateral:"+ lateralCounts +"  " +
+                "Anteroseptal:"+ anteroSeptalCounts +"  Anterolateral:"+ anteroLateralCounts +"  " +
+                "Inferior:"+ inferiorCounts + "  Inferolateral:"+ inferoLateralCounts +" ; ";
+        if (bbb.equalsIgnoreCase("None"))
+            parts += " BBB: None ; ";
+        else {
+            parts += bbb +" ; ";
+            parts += bbbReason +" ; ";
+        }
+        results.put("bbb", bbb);
+        results.put("bbbReason", bbbReason);
+        results.put("summary", parts);
+        return results;
     }
 
 
-    private void stemiDecissionMaker(HashMap<String, Object> stemiResults) {
+    private String stemiDecissionMaker(HashMap<String, Object> stemiResults) {
         String bbb = (String) stemiResults.get("bbb");
         String bbbReason = (String) stemiResults.get("bbbReason");
         if (bbb.equalsIgnoreCase("None") && bbbReason.isEmpty())
@@ -35,7 +249,7 @@ public class StemiDetection {
         if (!territoryList.isEmpty())
             topLabel = territoryList.get(0);
         else {
-            String[] cand = {"Septal", "Anterior", "Lateral", "Inferior", "Anteroseptal","Anterolateral","Inferolateral"};
+            String[] cand = {"Anterior", "Lateral", "Inferior", "Anteroseptal","Anterolateral","Inferolateral"};
             String bestName = ""; int bestVal = -1;
             if (cand.length == counts.length) {
                 for (int i = 0; i < cand.length; i++) {
@@ -112,199 +326,10 @@ public class StemiDetection {
         String finalText = "";
         finalText = mainLine + bbLine + tombLine;
         finalText +=  "\n Rationale → " + (String) stemiResults.get("summary");
-        System.out.println("----------------------------- Final Stemi Decission --------------------------------");
-        System.out.println(finalText);
+//        System.out.println("----------------------------- Final Stemi Decission --------------------------------");
+//        System.out.println(finalText);
+        return finalText;
     }
 
-    private HashMap<String, Object> classifyStemi(StemiCalculationData stemiData) {
-        HashMap<String, Object> results = new HashMap<>();
-        int[] allContigCounts = stemiData.getAllContigCounts();
-        int septalCounts = allContigCounts[0];
-        int anteriorCounts = allContigCounts[1];
-        int lateralCounts = allContigCounts[2];
-        int inferiorCounts = allContigCounts[3];
-        int anteroSeptalCounts = allContigCounts[4];
-        int anteroLateralCounts = allContigCounts[5];
-        int inferoLateralCounts = allContigCounts[6];
-//        results.put("territoryScores", allContigCounts);
-        results.put("counts", allContigCounts);
-        ArrayList<Integer> tomb = stemiData.getTombstoneStrong();
-        int tombSeptal = (septalCounts == 1 && tomb.get(0) == 1) ? 1 : 0;
-        int tombAnterior = (anteriorCounts == 1 && tomb.get(1) == 1) ? 1 : 0;
-        int tombLateral = (lateralCounts == 1 && tomb.get(2) == 1) ? 1 : 0;
-        int tombInferior = (inferiorCounts == 1 && tomb.get(3) == 1) ? 1 : 0;
-        int tombAnteroSeptal = (anteroSeptalCounts == 1 && tomb.get(4) == 1) ? 1 : 0;
-        int tombAnteroLateral = (anteroLateralCounts == 1 && tomb.get(5) == 1) ? 1 : 0;
-        int tombInferoLateral = (inferoLateralCounts == 1 && tomb.get(6) == 1) ? 1 : 0;
-        //  Strong categories (≥2 elevated in that group)
-        ArrayList<String> territoryLabels = new ArrayList<String>();
-        if (anteroSeptalCounts >= 2) {
-            territoryLabels.add("Anteroseptal MI " + tombAnteroSeptal + " ");
-        }
-        else {
-            if (septalCounts >= 2)
-                territoryLabels.add("Septal MI "+ tombSeptal +" ");
-            if (anteriorCounts >= 2)
-                territoryLabels.add("Anterior MI " +tombAnterior +" ");
-        }
 
-        if (anteroLateralCounts >= 2)
-            territoryLabels.add("Anterolateral MI " + tombLateral +" ");
-        else {
-            if (lateralCounts >= 2)
-                territoryLabels.add("Lateral MI " +tombLateral+" ");
-        }
-
-        //  Inferior: only lead II → be conservative
-        if (inferiorCounts >= 1) {
-            //    % If also lateral elevated → inferolateral
-            if (inferoLateralCounts >= 2)
-                territoryLabels.add("Inferolateral MI " + tombInferoLateral + " ");
-            else
-                territoryLabels.add("Possible Inferior MI " + tombLateral + " || " + tombInferior + " ");
-        }
-
-        //  If nothing matched but global STEMI suspicion true, give a generic label
-        if (territoryLabels.isEmpty() && stemiData.getSuspicious() == 1)
-            territoryLabels.add("STEMI pattern (territory indeterminate)");
-        //  Use median QRS across all leads (robust)
-        results.put("territoryLabels", territoryLabels);
-        Utility ut = new Utility();
-        double qrsMedian = ut.medianDouble(stemiData.getQrsDuration());
-        String bbb = "None";
-        String bbbReason = "";
-        boolean wideQrs = (qrsMedian >= 120);
-        //  RBBB heuristic: wide QRS AND relatively prominent R (or rsR') in V1 and deeper S in V6
-        boolean isRbbbLike = wideQrs && (stemiData.getRAmplitude(3) > 0) && (stemiData.getSAmplitude(8) < 0);
-        //   LBBB heuristic: wide QRS AND broad/positive R in I or V6, small/absent Q in I, and deep S in V1
-        boolean isLbbbLike = wideQrs && (stemiData.getRAmplitude(0) > 0) || (stemiData.getRAmplitude(8) >0)
-                && (stemiData.getQAmplitude(0) >= -0.02) && (stemiData.getSAmplitude(3) < 0);
-
-        if (isLbbbLike && !isRbbbLike) {
-            bbb = "LBBB";
-            bbbReason = "QRS≥120 ms, broad/positive R in I/V6, deep S in V1, absent/small Q in I.";
-        }
-        else if (isRbbbLike && !isLbbbLike) {
-            bbb = "RBBB";
-            bbbReason = "QRS≥120 ms, prominent R/rsR' in V1, deep S in V6.";
-        }
-        else if ( wideQrs && (isRbbbLike || isLbbbLike) ) {
-            bbb = "Possible LBBB/RBBB";
-            bbbReason = "Wide QRS with mixed or incomplete amplitude patterns.";
-        }
-        //  MI territory line
-        String parts = "";
-        if (!territoryLabels.isEmpty())
-            parts = "MI territory: " + territoryLabels+" ; ";
-        else
-            parts = "MI territory: none assigned"+" ; ";
-        parts += "Counts — Septal:"+ septalCounts +"  Anterior:"+ anteriorCounts +"  Lateral:"+ lateralCounts +"  " +
-                "Anteroseptal:"+ anteroSeptalCounts +"  Anterolateral:"+ anteroLateralCounts +"  " +
-                "Inferior:"+ inferiorCounts + "  Inferolateral:"+ inferoLateralCounts +" ; ";
-        if (bbb.equalsIgnoreCase("None"))
-            parts += " BBB: None ; ";
-        else {
-            parts += bbb +" ; ";
-            parts += bbbReason +" ; ";
-        }
-        results.put("bbb", bbb);
-        results.put("bbbReason", bbbReason);
-        results.put("summary", parts);
-        return results;
-    }
-
-    private StemiCalculationData detectStemiPrivate(CardiacStruct cardiacStruct, Utility ut) {
-        StemiCalculationData stemiData = new StemiCalculationData();
-        String[] leadAlias = {"Lead1", "Lead2", "Lead3", "V1", "V2", "V3", "V4", "V5", "V6"};
-        for (int i = 0; i < 9; i++) {
-            CardiacData data = cardiacStruct.getLeadWiseCardiacStructLeadRangeFrom0To8(i);
-            stemiData.addLeadName(leadAlias[i]);
-            stemiData.addsTElevationMv( ut.median(data.getStElevation().stream().mapToDouble(Double::doubleValue).toArray()));
-            stemiData.addSagittaMv(ut.median(data.getStSagitaMv().stream().mapToDouble(Double::doubleValue).toArray()));
-            stemiData.addStMorphCode((int) ut.median(data.getStMorphologyCode()));
-            stemiData.addTombstoneFlag(ut.medianBoolean(data.getStTombstoneFlag()));
-            stemiData.addQrsDuration(ut.median(data.getQrsDuration()));
-            stemiData.addTAmplitude( ut.findMean(data.getTAmplitudeMv()) );
-            stemiData.addRAmplitude( ut.median(data.getRAmplitudeMv().stream().mapToDouble(Double::doubleValue).toArray()) );
-            stemiData.addSAmplitude( ut.median(data.getSAmplitudeMv().stream().mapToDouble(Double::doubleValue).toArray()) );
-            stemiData.addQAmplitude( ut.median(data.getQAmplitudeMv().stream().mapToDouble(Double::doubleValue).toArray()));
-
-
-        }
-        //  Territory groups with available labels
-        String[] septal = {"V1","V2"};
-        String[] anterior = {"V3","V4"};
-        String[] lateral = {"Lead1","V5","V6"};
-        String[] inferior = {"Lead2","Lead3"};
-        String[] preCordialLeads = {"V1","V2","V3","V4","V5","V6"};
-        double[] thr = new double[stemiData.getLeadName().size()];
-        for (int i = 0; i < stemiData.getLeadName().size(); i++) {
-            if (stemiData.getLeadName(i).equalsIgnoreCase(preCordialLeads[0]) || stemiData.getLeadName(i).
-                    equalsIgnoreCase(preCordialLeads[1]) || stemiData.getLeadName(i).equalsIgnoreCase(
-                    preCordialLeads[2]) || stemiData.getLeadName(i).equalsIgnoreCase(preCordialLeads[3]) ||
-                    stemiData.getLeadName(i).equalsIgnoreCase(preCordialLeads[4]) || stemiData.getLeadName(i).
-                    equalsIgnoreCase(preCordialLeads[5])
-            )
-               thr[i] = 0.2;
-            else
-               thr[i] = 0.1;
-        }
-        int[] stElevationFlag = IntStream.range(0, stemiData.getLeadName().size()).map(i-> (stemiData.
-                getsTElevationMv(i) >= thr[i]) ? 1:0).toArray();
-        int[] stConcaveDown = IntStream.range(0, stemiData.getLeadName().size()).map(i-> ((
-                stemiData.getStMorphCode(i) == -1) || (stemiData.getSagittaMv(i) < -0.05)) ? 1 : 0).toArray();
-        int[] tombstoneStrong = IntStream.range(0, stemiData.getLeadName().size()).map(i->
-                (stemiData.getTombstoneFlag(i) >= 1) ? 1 : 0 ).toArray();
-        int septalContigCounts = stElevationFlag[3] + stElevationFlag[4];
-        int anteriorContigCounts = stElevationFlag[5] + stElevationFlag[6];
-        int lateralContigCounts = stElevationFlag[0] + stElevationFlag[7] + stElevationFlag[8];
-        int inferiorContigCounts = stElevationFlag[1] + stElevationFlag[2];
-        int anteroSeptalContigCounts = stElevationFlag[3] + stElevationFlag[4] + stElevationFlag[5] + stElevationFlag[6];
-        int anteroLateralContigCounts = stElevationFlag[5] + stElevationFlag[6] + stElevationFlag[7] + stElevationFlag[8]
-                + stElevationFlag[0];
-        int inferoLateralContigCounts = stElevationFlag[1] + stElevationFlag[7] + stElevationFlag[8] + stElevationFlag[0];
-        int[] primaryContigCounts = {septalContigCounts, anteriorContigCounts, lateralContigCounts, inferiorContigCounts};
-        int[] allContigCounts = {septalContigCounts, anteriorContigCounts, lateralContigCounts, inferiorContigCounts,
-                anteroSeptalContigCounts, anteroLateralContigCounts, inferoLateralContigCounts};
-        // territoryFlags
-        int septalTerritoryFlags = (septalContigCounts >= 2) ? 1 : 0;
-        int anteriorTerritoryFlags = (anteriorContigCounts >= 2) ? 1 : 0;
-        int lateralTerritoryFlags = (lateralContigCounts >= 2) ? 1 : 0;
-        int inferiorTerritoryFlags = (inferiorContigCounts >= 2) ? 1 : 0;
-        int[] allTerritoryFlags = {septalTerritoryFlags, anteriorTerritoryFlags, lateralTerritoryFlags , inferiorTerritoryFlags};
-        int nElevContiguous = ut.findMax(primaryContigCounts);
-        int anyTerritoryContiguous = ut.findIfAnyNonZero(primaryContigCounts);
-        //Global STEMI heuristic:
-        //% (A) ≥2 elevated in any one territory (contiguity), or
-        //% (B) any elevated lead with strong tombstone morphology
-        int anyTombstoneElev = 0;
-        for (int i = 0; i < stElevationFlag.length; i++) {
-            if (stElevationFlag[i] == 1 && tombstoneStrong[i] == 1)
-                anyTombstoneElev = 1;
-        }
-        int suspicious = (anyTerritoryContiguous == 1 || anyTombstoneElev == 1) ? 1 : 0;
-        for (int i = 0; i < stElevationFlag.length; i++) {
-            stemiData.addStElevationFlag(stElevationFlag[i]);
-            stemiData.addStConcaveDown(stConcaveDown[i]);
-            stemiData.addTombstoneStrong(tombstoneStrong[i]);
-        }
-        stemiData.setNumberOfLeadsElevated(Arrays.stream(stElevationFlag).sum());
-        stemiData.setAnyTombstoneElev( anyTombstoneElev);
-        stemiData.setSuspicious(suspicious);
-        stemiData.setTerritoryCounts(primaryContigCounts);
-        stemiData.setTerritoryContiguous(allTerritoryFlags);
-        stemiData.setAllContigCounts(allContigCounts);
-        String summary = "";
-        if (suspicious == 1)
-            summary += "STEMI suspected ";
-        else
-            summary += "No STEMI pattern flagged; ";
-        summary += "Contiguous-elevated (max territory): "+nElevContiguous+"; ";
-        if (anyTombstoneElev == 1)
-            summary += "Tombstone morphology present; ";
-        summary += "ST ref: ST_Elevation_mV; ";
-        stemiData.setSummary(summary);
-        return  stemiData;
-
-    }
 }

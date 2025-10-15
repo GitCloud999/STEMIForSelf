@@ -23,15 +23,15 @@ public class Main {
 //        String fileName = "CAL_05000_250hz_raw.txt";
 //        String fileName = "CAL_10000_250hz_raw.txt";
 //        String fileName = "CAL_15000_250hz_raw.txt";
-//        String fileName = "CAL_20000_250hz_raw.txt";
-        String fileName = "CAL_20002_250hz_raw.txt";
+        String fileName = "CAL_20000_250hz_raw.txt";
+//        String fileName = "CAL_20002_250hz_raw.txt";
 
 //        String fileName = "CAL_20100_250hz_raw.txt";
 //        String fileName = "CAL_20110_250hz_raw.txt";
 //        String fileName = "CAL_20160_250hz_raw.txt";
-//        String fileName = "CAL_20260_250hz_raw.txt";
 //        String fileName = "CAL_20200_250hz_raw.txt";
 //        String fileName = "CAL_20210_250hz_raw.txt";
+//        String fileName = "CAL_20260_250hz_raw.txt";
 //        String fileName = "CAL_20500_250hz_raw.txt";
 //        String fileName = "CAL_20502_250hz_raw.txt";
 //        String fileName = "CAL_30000_250hz_raw.txt";
@@ -375,7 +375,8 @@ public class Main {
             }
 
             @Override
-            public void onCompletedLead2MetaData(TwelveLeadEcgData twelveLeadEcgData, HashMap<String, Double> hashMap, String arrhythmiaSummary) {
+            public void onCompletedLead2MetaData(TwelveLeadEcgData twelveLeadEcgData, HashMap<String, Double> hashMap, String arrhythmiaSummary,
+                                                 String stemiResult, String ischemiaResult) {
 
 //                System.out.println("======================= Summary From Lead 2 ======================================");
 //                System.out.println("======================= Average Summary From Lead1 to V6 ======================================");
@@ -387,6 +388,12 @@ public class Main {
                 System.out.println("QTc Interval : "+hashMap.get("qtcInterval") );
                 System.out.println();
                 System.out.println(arrhythmiaSummary);
+                System.out.println();
+                System.out.println("----------------------------- Final Stemi Decission --------------------------------");
+                System.out.println(stemiResult);
+                System.out.println();
+                System.out.println("------------------------- Ischemia Final Result --------------------------------");
+                System.out.println(ischemiaResult);
 
             }
         });

@@ -896,6 +896,7 @@ public class PQSTDetectionNew {
                     if(jIdx != -1) {
                         features.J.addIndex(jIdx);
                         features.J.addValue(ecg[jIdx]);
+                        double zz = ecg[jIdx];
                         double jRawAmplitude = ecg[jIdx] - baseLine;
                         amplitude.J.addColumnOneValue(jRawAmplitude);
                         amplitude.J.addColumnTwoValue(jRawAmplitude * amplitudeToMv);

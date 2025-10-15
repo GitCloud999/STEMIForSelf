@@ -116,7 +116,9 @@ public class SignalProcessing {
                 hashMap.put("qtInterval", 0.0);
                 hashMap.put("qtcInterval", 0.0);
                 String arrhythmia = "Since valid point detection has not been performed, the data is not qualified for arrhythmia detection.";
-                onResultCompleteListener.onCompletedLead2MetaData(twelveLeadEcgData, hashMap, arrhythmia);
+                String stemi = "Since valid point detection has not been performed, the data is not qualified for stemi detection.";
+                String ischemia = "Since valid point detection has not been performed, the data is not qualified for ischemia detection.";
+                onResultCompleteListener.onCompletedLead2MetaData(twelveLeadEcgData, hashMap, arrhythmia, stemi, ischemia);
                 return;
             }
             // Give fileName so text file could be saved.

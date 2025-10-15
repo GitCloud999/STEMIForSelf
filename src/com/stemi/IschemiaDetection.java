@@ -12,186 +12,6 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 public class IschemiaDetection {
-    private void ischemiaDecissionMaker(ArrayList<String> primaryLabels, ArrayList<String> supportLabels,
-                                        HashMap<String, Object> finalDecission, ArrayList<TerritoryBasedIschemiaRecord>
-                                                uniqueTerritoriesAllDataList, ArrayList<String> uniqueTerritories, String rationale) {
-        String[] territoryArray = {"Septal","Anterior","Lateral","Inferior","Unknown"};
-        for (int i = 0; i < territoryArray.length; i++) {
-            String terr = territoryArray[i];
-            for (int j = 0; j < primaryLabels.size(); j++) {
-                if (terr.equalsIgnoreCase(primaryLabels.get(j) + " ischemia")) {
-                    finalDecission.put("has" + terr.substring(0, 1).toUpperCase(), 1);
-                    break;
-                }
-            }
-        }
-        finalDecission.put("hasAnyPrimary", !primaryLabels.isEmpty());
-        finalDecission.put("hasAnySupport", !supportLabels.isEmpty());
-        finalDecission.put("status", "no-data");
-        if ( (boolean) finalDecission.get("hasAnyPrimary"))
-            finalDecission.put("status", "ischemia-suspected");
-        else if ( (boolean) finalDecission.get("hasAnySupport"))
-            finalDecission.put("status", "possible-ischemia-support-only");
-        else
-            finalDecission.put("status", "no-ischemia-flagged");
-
-
-        String resultStr = "";
-        if (((String) finalDecission.get("status")).equalsIgnoreCase(("ischemia-suspected"))) {
-            String x = "Ischemia suspected";
-            x += "\n Primary territories: ";
-            resultStr = resultStr +String.join(", ", primaryLabels);
-            if (((boolean)finalDecission.get("hasAnySupport")))
-                resultStr += " Supportive evidence (T-wave inversion): " + String.join(", ", supportLabels);
-        }
-        else if (((String) finalDecission.get("status")).equalsIgnoreCase(("possible-ischemia-support-only"))) {
-            resultStr += " Possible ischemia (supportive evidence only) ";
-            resultStr += "Supportive territories (T-wave inversion): " + String.join(", ",
-                    supportLabels.stream().distinct().collect(Collectors.toList()));
-        }
-        else {
-            resultStr += "No ischemia pattern flagged.";
-        }
-        if (!uniqueTerritoriesAllDataList.isEmpty()) {
-            for (int i = 0; i < uniqueTerritories.size(); i++) {
-                resultStr += " \n "+uniqueTerritoriesAllDataList.get(i).getTerritory()+" : horiz/down depressed= " +
-                        uniqueTerritoriesAllDataList.get(i).getnHorizDownDepressed() + " , deep <= -0.10mV = "+
-                        (uniqueTerritoriesAllDataList.get(i).isHasDeepDepressed()? "Yes" : "No") + ", T-inv= " +
-                        uniqueTerritoriesAllDataList.get(i).getnTInverted();
-            }
-        }
-        //  if strlength(rationale) > 0
-        //    lines(end+1) = "Evidence -> " + rationale;
-        //end
-        if (!rationale.isEmpty())
-            resultStr += " \n \n" + rationale;
-        System.out.println("------------------------- Ischemia Final Result --------------------------------");
-        System.out.println(resultStr);
-    }
-
-    public void classifyIschemia(IschemiaData ischemiaData, ArrayList<Double> stElevationMv) {
-        ArrayList<String>  uniqueTerritories = ischemiaData.getTerritory().stream().distinct().collect(Collectors.toCollection(ArrayList::new));
-        ArrayList<TerritoryBasedIschemiaRecord>  uniqueTerritoriesAllDataList = new ArrayList<>();
-        double sTDeepThreshold = -0.10;
-        for (int i = 0; i < uniqueTerritories.size(); i++) {
-            ArrayList<Integer> matchingIndices = new ArrayList<>();
-            for (int j = 0; j < ischemiaData.getTerritory().size(); j++) {
-                if (uniqueTerritories.get(i).equalsIgnoreCase(ischemiaData.getTerritory().get(j)))
-                    matchingIndices.add(j);
-            }
-            int nDepressedSum = 0 , nHorizDownDepressedSum = 0, nTInversionFlagSum = 0;
-            boolean flag = true, hasDeppDepressed = false;
-            for (int j = 0; j < matchingIndices.size(); j++) {
-                if (ischemiaData.getStDepressionFlag().get(matchingIndices.get(j)))
-                    nDepressedSum++;
-                if (ischemiaData.getStDepressionFlag().get(matchingIndices.get(j)) && ischemiaData.getStHorizOrDownFlag().get(matchingIndices.get(j)))
-                    nHorizDownDepressedSum++;
-                if ( flag && stElevationMv.get(matchingIndices.get(j)) <= sTDeepThreshold && ischemiaData.getStHorizOrDownFlag().get(matchingIndices.get(j)) )
-                {
-                    flag = false;
-                    hasDeppDepressed = true;
-                }
-                if (ischemiaData.getTInverssionFlag().get(matchingIndices.get(j)))
-                    nTInversionFlagSum++;
-            }
-            boolean isPositive = (nHorizDownDepressedSum >= 2 || hasDeppDepressed);
-            boolean isSupport = (nTInversionFlagSum >= 2);
-
-            uniqueTerritoriesAllDataList.add(new TerritoryBasedIschemiaRecord( uniqueTerritories.get(i),
-                            matchingIndices.size(),
-                            nDepressedSum,
-                            nHorizDownDepressedSum,
-                            hasDeppDepressed,
-                            nTInversionFlagSum,
-                            isPositive,
-                            isSupport
-                    )
-            );
-        }
-        ArrayList<Integer> isPos = new ArrayList<>();
-        ArrayList<Integer> isSupport = new ArrayList<>();
-        for (int i = 0; i < uniqueTerritoriesAllDataList.size(); i++) {
-            isPos.add(uniqueTerritoriesAllDataList.get(i).getIsPositive()? 1 : 0);
-            isSupport.add(uniqueTerritoriesAllDataList.get(i).getIsSupport() ? 1 : 0);
-        }
-//        ArrayList<Integer> isPos = IntStream.range(0, uniqueTerritoriesAllDataList.size()).mapToObj(i -> ( uniqueTerritoriesAllDataList.get(i).
-//                getnHorizDownDepressed() >= 2 || uniqueTerritoriesAllDataList.get(i).isHasDeepDepressed() ) ? 1 : 0).collect(Collectors.toCollection(ArrayList::new));
-//        ArrayList<Integer> isSupport = uniqueTerritoriesAllDataList.stream().map(
-//                territoryBasedIschemiaRecord -> (territoryBasedIschemiaRecord.getnTInverted()
-//                        >=2) ? 1 : 0 ).collect(Collectors.toCollection(ArrayList::new));
-
-        ArrayList<String> primaryTerritories = IntStream.range(0, isPos.size()).filter(i -> (isPos.get(i) == 1)).
-                mapToObj(i -> uniqueTerritoriesAllDataList.get(i).getTerritory()).collect(Collectors.toCollection(ArrayList::new));
-        ArrayList<String> supportTerritories = IntStream.range(0, isSupport.size()).filter(i -> (isSupport.get(i) == 1)).
-                mapToObj(i -> uniqueTerritoriesAllDataList.get(i).getTerritory()).collect(Collectors.toCollection(ArrayList::new));
-
-        ArrayList<String> primaryLabels = IntStream.range(0, primaryTerritories.size()).mapToObj(i ->
-                primaryTerritories.get(i) + " ischemia").collect(Collectors.toCollection(ArrayList::new));
-        ArrayList<String> supportLabels = IntStream.range(0, supportTerritories.size()).mapToObj(i ->
-                supportTerritories.get(i) + " ischemia").collect(Collectors.toCollection(ArrayList::new));
-        HashMap<String, Object> finalDecission = new HashMap<>();
-
-        //  Primary territories with counts
-
-        String rationale = "";
-        String parts = "";
-        if (!primaryTerritories.isEmpty())
-        {
-            for (int i = 0; i < primaryTerritories.size(); i++) {
-                for (int j = 0; j < uniqueTerritoriesAllDataList.size(); j++) {
-                    if (uniqueTerritoriesAllDataList.get(j).getTerritory().equalsIgnoreCase(primaryTerritories.get(i))) {
-                        parts += primaryTerritories.get(i) + " : " + uniqueTerritoriesAllDataList.get(j).getnHorizDownDepressed()
-                                + " horiz/down depressed ";
-                        if (uniqueTerritoriesAllDataList.get(j).isHasDeepDepressed())
-                            parts += ", deep ≤ -0.10 mV present";
-                        if (uniqueTerritoriesAllDataList.get(j).getnTInverted() >= 1)
-                            parts += ", T-inv = "+uniqueTerritoriesAllDataList.get(j).getnTInverted();
-                    }
-                }
-                if (i < primaryTerritories.size()-1)
-                    parts += "\n";
-            }
-        }
-        // % Support-only territories (that weren’t primary)
-        if (!supportTerritories.isEmpty()) {
-
-            //support_only = setdiff(string(support_territories), string(primary_territories));
-            //for i = 1:numel(support_only)
-            //    terr = support_only(i);
-            //    r = T(strcmp(T.Territory, terr), :);
-            //    seg = terr + sprintf(" (support): T-inv=%d", r.N_T_Inverted);
-            //    parts(end+1,1) = seg;
-            //end
-
-        }
-        if (parts.isEmpty())
-            rationale = "No ischemia criteria met.";
-        else {
-            //  s = "Evidence -> " + strjoin(parts, " | ");
-            rationale = "Evidence -> "+parts;
-        }
-        //  % ---------- Summary line ----------
-        //if isempty(primary_labels)
-        //    class_summary = "No ischemia pattern flagged.";
-        //else
-        //    class_summary = "Ischemia suspected: " + join(primary_labels, ", ");
-        //    if ~isempty(support_labels)
-        //        class_summary = class_summary + " | Support: T-wave inversion in " + join(support_labels, ", ");
-        //    end
-        //end
-        String classSumarry = "";
-        if (primaryLabels.isEmpty())
-            classSumarry = "No ischemia pattern flagged.";
-        else {
-            classSumarry = "Ischemia suspected: " + String.join(", ", primaryLabels);
-            if (!supportLabels.isEmpty())
-                classSumarry += " | Support: T-wave inversion in " +String.join(", ", supportLabels);
-        }
-        System.out.println("---------------- Classify Ischemia Results -------------");
-        System.out.println(classSumarry);
-        ischemiaDecissionMaker(primaryLabels, supportLabels, finalDecission,uniqueTerritoriesAllDataList, uniqueTerritories, rationale);
-    }
-
 
     public IschemiaData detectIschemia(CardiacStruct cardiacStruct, double fs, StemiCalculationData stemiData, Utility ut) {
         //  ------- Lead label → territory mapping ----------
@@ -201,7 +21,7 @@ public class IschemiaDetection {
         double stDepressionThreshold = -0.15;  //   ST depression threshold
         double stFlatBand = 0.02;   //  horizontal band
         double downSlopeBand = -0.02;   //  downsloping band
-        double tInverseThreshold = -0.20;    //  significant T inversion
+        double tInverseThreshold = -0.13;    //  significant T inversion
         ArrayList<String> slope = new ArrayList<>();
         ArrayList<Boolean> stDepressionFlag = new ArrayList<>();
         ArrayList<Boolean> stHorizOrDownFlag = new ArrayList<>();
@@ -260,9 +80,9 @@ public class IschemiaDetection {
             int nSt = IntStream.range(0, mask.length).filter(a -> mask[a] == 1).map(a -> (stPersistent[a]) ? 1 : 0).sum();
             int nSts = IntStream.range(0, mask.length).filter(a -> mask[a] == 1).map(a -> (stPersistentStrong[a]) ? 1 : 0).sum();
             int nT = IntStream.range(0, mask.length).filter(a -> mask[a] == 1).map(a -> (tPersistentInverse[a]) ? 1 : 0).sum();
-            if (nSt >= 3 && nT >= 3)
+            if (nSt >= 2 && nT >= 1)
                 terrSuspicious[i] = true;
-            else if (nSts >= 2 && nT >= 2) {
+            else if (nSts >= 2 && nT >= 1) {
                 terrSuspicious[i] = true;
             }
         }
@@ -288,7 +108,7 @@ public class IschemiaDetection {
         ischemiaData.setTerritoryCounts(territoryCounts);
         ischemiaData.setNLeadStDepression(nLeadStDepression);
         ischemiaData.setNLeadsTInverse(nLeadsTInverse);
-        ischemiaData.setSuspicious( nLeadStDepression >= 2 || nLeadsTInverse >= 2 );
+        ischemiaData.setSuspicious( nLeadStDepression > 2 || nLeadsTInverse >= 1 );
         ischemiaData.setGlobalSuspicious(globalSuspicious);
         // Summary
         if (globalSuspicious)
@@ -299,5 +119,188 @@ public class IschemiaDetection {
             ischemiaData.setIschemiaSummary("No ischemia flagged");
         return ischemiaData;
     }
+
+
+    public String classifyIschemia(IschemiaData ischemiaData, ArrayList<Double> stElevationMv) {
+        ArrayList<String>  uniqueTerritories = ischemiaData.getTerritory().stream().distinct().collect(Collectors.toCollection(ArrayList::new));
+        ArrayList<TerritoryBasedIschemiaRecord>  uniqueTerritoriesAllDataList = new ArrayList<>();
+        double sTDeepThreshold = -0.16;
+        for (int i = 0; i < uniqueTerritories.size(); i++) {
+            ArrayList<Integer> matchingIndices = new ArrayList<>();
+            for (int j = 0; j < ischemiaData.getTerritory().size(); j++) {
+                if (uniqueTerritories.get(i).equalsIgnoreCase(ischemiaData.getTerritory().get(j)))
+                    matchingIndices.add(j);
+            }
+            int nDepressedSum = 0 , nHorizDownDepressedSum = 0, nTInversionFlagSum = 0;
+            boolean flag = true, hasDeppDepressed = false;
+            for (int j = 0; j < matchingIndices.size(); j++) {
+                if (ischemiaData.getStDepressionFlag().get(matchingIndices.get(j)))
+                    nDepressedSum++;
+                if (ischemiaData.getStDepressionFlag().get(matchingIndices.get(j)) && ischemiaData.getStHorizOrDownFlag().get(matchingIndices.get(j)))
+                    nHorizDownDepressedSum++;
+                if ( flag && stElevationMv.get(matchingIndices.get(j)) <= sTDeepThreshold && ischemiaData.getStHorizOrDownFlag().get(matchingIndices.get(j)) )
+                {
+                    flag = false;
+                    hasDeppDepressed = true;
+                }
+                if (ischemiaData.getTInverssionFlag().get(matchingIndices.get(j)))
+                    nTInversionFlagSum++;
+            }
+            boolean isPositive = (nHorizDownDepressedSum >= 3 || hasDeppDepressed);
+            boolean isSupport = (nTInversionFlagSum >= 3);
+
+            uniqueTerritoriesAllDataList.add(new TerritoryBasedIschemiaRecord( uniqueTerritories.get(i),
+                            matchingIndices.size(),
+                            nDepressedSum,
+                            nHorizDownDepressedSum,
+                            hasDeppDepressed,
+                            nTInversionFlagSum,
+                            isPositive,
+                            isSupport
+                    )
+            );
+        }
+        ArrayList<Integer> isPos = new ArrayList<>();
+        ArrayList<Integer> isSupport = new ArrayList<>();
+        for (int i = 0; i < uniqueTerritoriesAllDataList.size(); i++) {
+            isPos.add(uniqueTerritoriesAllDataList.get(i).getIsPositive()? 1 : 0);
+            isSupport.add(uniqueTerritoriesAllDataList.get(i).getIsSupport() ? 1 : 0);
+        }
+//        ArrayList<Integer> isPos = IntStream.range(0, uniqueTerritoriesAllDataList.size()).mapToObj(i -> ( uniqueTerritoriesAllDataList.get(i).
+//                getnHorizDownDepressed() >= 2 || uniqueTerritoriesAllDataList.get(i).isHasDeepDepressed() ) ? 1 : 0).collect(Collectors.toCollection(ArrayList::new));
+//        ArrayList<Integer> isSupport = uniqueTerritoriesAllDataList.stream().map(
+//                territoryBasedIschemiaRecord -> (territoryBasedIschemiaRecord.getnTInverted()
+//                        >=2) ? 1 : 0 ).collect(Collectors.toCollection(ArrayList::new));
+
+        ArrayList<String> primaryTerritories = IntStream.range(0, isPos.size()).filter(i -> (isPos.get(i) == 1)).
+                mapToObj(i -> uniqueTerritoriesAllDataList.get(i).getTerritory()).collect(Collectors.toCollection(ArrayList::new));
+        ArrayList<String> supportTerritories = IntStream.range(0, isSupport.size()).filter(i -> (isSupport.get(i) == 1)).
+                mapToObj(i -> uniqueTerritoriesAllDataList.get(i).getTerritory()).collect(Collectors.toCollection(ArrayList::new));
+
+        ArrayList<String> primaryLabels = IntStream.range(0, primaryTerritories.size()).mapToObj(i ->
+                primaryTerritories.get(i) + " ischemia").collect(Collectors.toCollection(ArrayList::new));
+        ArrayList<String> supportLabels = IntStream.range(0, supportTerritories.size()).mapToObj(i ->
+                supportTerritories.get(i) + " ischemia").collect(Collectors.toCollection(ArrayList::new));
+        HashMap<String, Object> finalDecission = new HashMap<>();
+
+        //  Primary territories with counts
+
+        String rationale = "";
+        String parts = "";
+        if (!primaryTerritories.isEmpty())
+        {
+            for (int i = 0; i < primaryTerritories.size(); i++) {
+                for (int j = 0; j < uniqueTerritoriesAllDataList.size(); j++) {
+                    if (uniqueTerritoriesAllDataList.get(j).getTerritory().equalsIgnoreCase(primaryTerritories.get(i))) {
+                        parts += primaryTerritories.get(i) + " : " + uniqueTerritoriesAllDataList.get(j).getnHorizDownDepressed()
+                                + " horiz/down depressed ";
+                        if (uniqueTerritoriesAllDataList.get(j).isHasDeepDepressed())
+                            parts += ", deep ≤ -0.10 mV present";
+                        if (uniqueTerritoriesAllDataList.get(j).getnTInverted() >= 3)
+                            parts += ", T-inv = "+uniqueTerritoriesAllDataList.get(j).getnTInverted();
+                    }
+                }
+                if (i < primaryTerritories.size()-1)
+                    parts += "\n";
+            }
+        }
+        // % Support-only territories (that weren’t primary)
+        if (!supportTerritories.isEmpty()) {
+
+            //support_only = setdiff(string(support_territories), string(primary_territories));
+            //for i = 1:numel(support_only)
+            //    terr = support_only(i);
+            //    r = T(strcmp(T.Territory, terr), :);
+            //    seg = terr + sprintf(" (support): T-inv=%d", r.N_T_Inverted);
+            //    parts(end+1,1) = seg;
+            //end
+
+        }
+        if (parts.isEmpty())
+            rationale = "No ischemia criteria met.";
+        else {
+            //  s = "Evidence -> " + strjoin(parts, " | ");
+            rationale = "Evidence -> "+parts;
+        }
+        //  % ---------- Summary line ----------
+        //if isempty(primary_labels)
+        //    class_summary = "No ischemia pattern flagged.";
+        //else
+        //    class_summary = "Ischemia suspected: " + join(primary_labels, ", ");
+        //    if ~isempty(support_labels)
+        //        class_summary = class_summary + " | Support: T-wave inversion in " + join(support_labels, ", ");
+        //    end
+        //end
+        String classSumarry = "";
+        if (primaryLabels.isEmpty())
+            classSumarry = "No ischemia pattern flagged.";
+        else {
+            classSumarry = "Ischemia suspected: " + String.join(", ", primaryLabels);
+            if (!supportLabels.isEmpty())
+                classSumarry += " | Support: T-wave inversion in " +String.join(", ", supportLabels);
+        }
+        System.out.println("---------------- Classify Ischemia Results -------------");
+        System.out.println(classSumarry);
+        return ischemiaDecissionMaker(primaryLabels, supportLabels, finalDecission,uniqueTerritoriesAllDataList, uniqueTerritories, rationale);
+    }
+
+    private String ischemiaDecissionMaker(ArrayList<String> primaryLabels, ArrayList<String> supportLabels,
+                                        HashMap<String, Object> finalDecission, ArrayList<TerritoryBasedIschemiaRecord>
+                                                uniqueTerritoriesAllDataList, ArrayList<String> uniqueTerritories, String rationale) {
+        String[] territoryArray = {"Septal","Anterior","Lateral","Inferior","Unknown"};
+        for (int i = 0; i < territoryArray.length; i++) {
+            String terr = territoryArray[i];
+            for (int j = 0; j < primaryLabels.size(); j++) {
+                if (terr.equalsIgnoreCase(primaryLabels.get(j) + " ischemia")) {
+                    finalDecission.put("has" + terr.substring(0, 1).toUpperCase(), 1);
+                    break;
+                }
+            }
+        }
+        finalDecission.put("hasAnyPrimary", !primaryLabels.isEmpty());
+        finalDecission.put("hasAnySupport", !supportLabels.isEmpty());
+        finalDecission.put("status", "no-data");
+        if ( (boolean) finalDecission.get("hasAnyPrimary"))
+            finalDecission.put("status", "ischemia-suspected");
+        else if ( (boolean) finalDecission.get("hasAnySupport"))
+            finalDecission.put("status", "possible-ischemia-support-only");
+        else
+            finalDecission.put("status", "no-ischemia-flagged");
+
+
+        String resultStr = "";
+        if (((String) finalDecission.get("status")).equalsIgnoreCase(("ischemia-suspected"))) {
+            String x = "Ischemia suspected";
+            x += "\n Primary territories: ";
+            resultStr = resultStr +String.join(", ", primaryLabels);
+            if (((boolean)finalDecission.get("hasAnySupport")))
+                resultStr += " Supportive evidence (T-wave inversion): " + String.join(", ", supportLabels);
+        }
+        else if (((String) finalDecission.get("status")).equalsIgnoreCase(("possible-ischemia-support-only"))) {
+            resultStr += " Possible ischemia (supportive evidence only) ";
+            resultStr += "Supportive territories (T-wave inversion): " + String.join(", ",
+                    supportLabels.stream().distinct().collect(Collectors.toList()));
+        }
+        else {
+            resultStr += "No ischemia pattern flagged.";
+        }
+        if (!uniqueTerritoriesAllDataList.isEmpty()) {
+            for (int i = 0; i < uniqueTerritories.size(); i++) {
+                resultStr += " \n "+uniqueTerritoriesAllDataList.get(i).getTerritory()+" : horiz/down depressed= " +
+                        uniqueTerritoriesAllDataList.get(i).getnHorizDownDepressed() + " , deep <= -0.10mV = "+
+                        (uniqueTerritoriesAllDataList.get(i).isHasDeepDepressed()? "Yes" : "No") + ", T-inv= " +
+                        uniqueTerritoriesAllDataList.get(i).getnTInverted();
+            }
+        }
+        //  if strlength(rationale) > 0
+        //    lines(end+1) = "Evidence -> " + rationale;
+        //end
+        if (!rationale.isEmpty())
+            resultStr += " \n \n" + rationale;
+//        System.out.println("------------------------- Ischemia Final Result --------------------------------");
+//        System.out.println(resultStr);
+        return resultStr;
+    }
+
 
 }

@@ -127,17 +127,18 @@ public class PointDetectionNew {
         }
         TwelveLeadEcgData twelveLeadEcgData;
         twelveLeadEcgData = createTwelveLeadData(onResultCompleteListener);
+        String arrhythmiaResult = "";
         try{
 //            onResultCompleteListener.onCompletedLead2MetaData(twelveLeadEcgData, map);
             ArrhythmiaDetection arrhythmia = new ArrhythmiaDetection();
-            String arrhythmiaResult = arrhythmia.detectArrhythmia(cardiacStruct, finalData, fs, map);
+            arrhythmiaResult = arrhythmia.detectArrhythmia(cardiacStruct, finalData, fs, map);
         } catch (Exception e) {
             System.out.println("\033[1mError *** Issue in Arrhythmia Detection ---- \033[0m");
             e.printStackTrace();
         }
         try {
             StemiDetection stemi = new StemiDetection();
-            stemi.detectStemi(cardiacStruct, fs, onResultCompleteListener, twelveLeadEcgData, map, ut);
+            stemi.detectStemi(cardiacStruct, fs, onResultCompleteListener, twelveLeadEcgData, map, ut, arrhythmiaResult);
         } catch (Exception e) {
             System.out.println("\033[1mError *** Issue in STEMI Detection ---- \033[0m");
             e.printStackTrace();
