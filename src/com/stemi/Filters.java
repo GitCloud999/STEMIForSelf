@@ -604,6 +604,18 @@ public class Filters {
         return movingAvg;
     }
 
+    public double[] movingAverageForWindowSizeOfTwo(double[] data) {
+        double[] newData = new double[data.length];
+        for (int i = 0; i < data.length; i++) {
+            if (i == 0)
+                newData[i] = data[i];
+            else {
+                newData[i] = (data[i-1] + data[i]) / 2;
+            }
+        }
+        return newData;
+    }
+
 /*    public double[] movingAverage9April2025(double[] data, double windowSize) {
         if(windowSize <= 0 ) {
             System.out.println("Window size must be a positive integer.");

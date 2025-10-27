@@ -59,6 +59,15 @@ public class Utility {
         return min;
     }
 
+    public int findMinInIntegerList(ArrayList<Integer> arr) {
+        int min = arr.get(0);
+        for (int i = 1; i < arr.size(); i++) {
+            if (arr.get(i) < min)
+                min = arr.get(i);
+        }
+        return min;
+    }
+
     public double findMaxAbsolute(double[] arr) {
         if (arr.length == 0) {
 //            System.out.println("array is empty....");
@@ -712,4 +721,5 @@ public class Utility {
         }
         return  0;
     }
+
 }

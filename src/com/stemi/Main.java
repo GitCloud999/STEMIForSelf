@@ -17,13 +17,13 @@ public class Main {
 
 //        String fileName = "1722569222110000_raw.txt";
 //        String fileName = "1722573078570000_raw.txt";
-//        String fileName = "ANE_20000_250hz_raw.txt";
+        String fileName = "ANE_20000_250hz_raw.txt";
 //        String fileName = "ANE_20001_250hz_raw.txt";
 //        String fileName = "ANE_20002_250hz_raw.txt";
 //        String fileName = "CAL_05000_250hz_raw.txt";
 //        String fileName = "CAL_10000_250hz_raw.txt";
 //        String fileName = "CAL_15000_250hz_raw.txt";
-        String fileName = "CAL_20000_250hz_raw.txt";
+//        String fileName = "CAL_20000_250hz_raw.txt";
 //        String fileName = "CAL_20002_250hz_raw.txt";
 
 //        String fileName = "CAL_20100_250hz_raw.txt";

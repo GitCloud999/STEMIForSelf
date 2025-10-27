@@ -104,6 +104,10 @@ public class SignalProcessing {
                     }
                 }
             }
+            double[][] calculationData = new double[finalData.length][finalData[0].length];
+            for (int i = 0; i < finalData.length; i++) {
+                calculationData[i] = filters.movingAverageForWindowSizeOfTwo(finalData[i]);
+            }
             filters = null;
             System.gc();
             PointDetectionNew pt = new PointDetectionNew(finalData);
@@ -122,7 +126,7 @@ public class SignalProcessing {
                 return;
             }
             // Give fileName so text file could be saved.
-            pt.findPointsForAllColumns(Fs, onResultCompleteListener);
+            pt.findPointsForAllColumns(Fs, onResultCompleteListener, calculationData);
 
         } catch (Exception e) {
             onResultCompleteListener.onFailed("Error in filterProcessing() method");
