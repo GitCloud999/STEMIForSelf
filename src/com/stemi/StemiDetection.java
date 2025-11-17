@@ -11,13 +11,41 @@ public class StemiDetection {
 
     public void detectStemi(CardiacStruct cardiacStruct, double fs, OnResultCompleteListener onResultCompleteListener,
                             TwelveLeadEcgData twelveLeadEcgData, HashMap<String, Double> map, Utility ut, String arrhythmiaResult) {
-        StemiCalculationData stemiData = detectStemiPrivate(cardiacStruct, ut);
-        HashMap<String, Object> stemiResults = classifyStemi(stemiData);
-        String stemiResult = stemiDecissionMaker(stemiResults);
-        IschemiaDetection ischemiaDetection = new IschemiaDetection();
-        IschemiaData ischemiaData = ischemiaDetection.detectIschemia(cardiacStruct, fs, stemiData, ut);
-        String ischemiaResult = ischemiaDetection.classifyIschemia(ischemiaData, stemiData.getSTElevationMv());
-        onResultCompleteListener.onCompletedLead2MetaData(twelveLeadEcgData, map, arrhythmiaResult, stemiResult, ischemiaResult);
+//        String stemiResult = "";
+//        String ischemiaResult ="";
+//        try{
+//            StemiCalculationData stemiData = detectStemiPrivate(cardiacStruct, ut);
+//            HashMap<String, Object> stemiResults = classifyStemi(stemiData);
+//            stemiResult = stemiDecissionMaker(stemiResults);
+//            IschemiaDetection ischemiaDetection = new IschemiaDetection();
+//            IschemiaData ischemiaData = ischemiaDetection.detectIschemia(cardiacStruct, fs, stemiData, ut);
+//            ischemiaResult = ischemiaDetection.classifyIschemia(ischemiaData, stemiData.getSTElevationMv());
+//        } catch (Exception e) {
+//            stemiResult = "Data not sufficient for stemi calculation.";
+//            ischemiaResult = "Data not sufficient for ischemia calculation";
+//        }
+//        onResultCompleteListener.onCompletedLead2MetaData(twelveLeadEcgData, map, arrhythmiaResult, stemiResult, ischemiaResult);
+        String stemiResult = "";
+        String ischemiaResult ="";
+        try{
+            StemiCalculationData stemiData = detectStemiPrivate(cardiacStruct, ut);
+            HashMap<String, Object> stemiResults = classifyStemi(stemiData);
+            stemiResult = stemiDecissionMaker(stemiResults);
+            IschemiaDetection ischemiaDetection = new IschemiaDetection();
+            IschemiaData ischemiaData = ischemiaDetection.detectIschemia(cardiacStruct, fs, stemiData, ut);
+            ischemiaResult = ischemiaDetection.classifyIschemia(ischemiaData, stemiData.getSTElevationMv());
+
+        } catch (Exception e) {
+            stemiResult = "Data not sufficient for stemi calculation.";
+            ischemiaResult = "Data not sufficient for ischemia calculation";
+        }
+        if (arrhythmiaResult.startsWith("Abnormal ECG"))
+            ischemiaResult += "\nIf you feel chest pain, palpitations, " +
+                    "breathlessness, or dizziness, take an Aspirin 150 mg (if not allergic) and consult your doctor. If the ECG" +
+                    " is abnormal but you have no symptoms, repeat the ECG every 3 hours. If it stays abnormal, see your doctor." +
+                    " Further tests like an echocardiogram or treadmill test may be advised.";
+        String finalResult = arrhythmiaResult +"\n"+ stemiResult +"\n"+ ischemiaResult;
+        onResultCompleteListener.onCompletedLead2MetaData(twelveLeadEcgData, map, finalResult);
     }
 
     private StemiCalculationData detectStemiPrivate(CardiacStruct cardiacStruct, Utility ut) {
@@ -26,25 +54,25 @@ public class StemiDetection {
         for (int i = 0; i < 9; i++) {
             CardiacData data = cardiacStruct.getLeadWiseCardiacStructLeadRangeFrom0To8(i);
             stemiData.addLeadName(leadAlias[i]);
-//            stemiData.addsTElevationMv( ut.median(data.getStElevation().stream().mapToDouble(Double::doubleValue).toArray()));
-//            stemiData.addSagittaMv(ut.median(data.getStSagitaMv().stream().mapToDouble(Double::doubleValue).toArray()));
-//            stemiData.addStMorphCode((int) ut.median(data.getStMorphologyCode()));
-//            stemiData.addTombstoneFlag(ut.medianBoolean(data.getStTombstoneFlag()));
-//            stemiData.addQrsDuration(ut.median(data.getQrsDuration()));
-//            stemiData.addTAmplitude( ut.findMean(data.getTAmplitudeMv()) );
-//            stemiData.addRAmplitude( ut.median(data.getRAmplitudeMv().stream().mapToDouble(Double::doubleValue).toArray()) );
-//            stemiData.addSAmplitude( ut.median(data.getSAmplitudeMv().stream().mapToDouble(Double::doubleValue).toArray()) );
-//            stemiData.addQAmplitude( ut.median(data.getQAmplitudeMv().stream().mapToDouble(Double::doubleValue).toArray()));
-
-            stemiData.addsTElevationMv( ut.findMax(data.getStElevation().stream().mapToDouble(Double::doubleValue).toArray()));
+            stemiData.addsTElevationMv( ut.median(data.getStElevation().stream().mapToDouble(Double::doubleValue).toArray()));
             stemiData.addSagittaMv(ut.median(data.getStSagitaMv().stream().mapToDouble(Double::doubleValue).toArray()));
             stemiData.addStMorphCode((int) ut.median(data.getStMorphologyCode()));
-            stemiData.addTombstoneFlag(data.getStTombstoneFlag().contains(true)? 1 : 0);
+            stemiData.addTombstoneFlag(ut.medianBoolean(data.getStTombstoneFlag()));
             stemiData.addQrsDuration(ut.median(data.getQrsDuration()));
-            stemiData.addTAmplitude( ut.medianDouble(data.getTAmplitudeMv()) );
+            stemiData.addTAmplitude( ut.findMean(data.getTAmplitudeMv()) );
             stemiData.addRAmplitude( ut.median(data.getRAmplitudeMv().stream().mapToDouble(Double::doubleValue).toArray()) );
             stemiData.addSAmplitude( ut.median(data.getSAmplitudeMv().stream().mapToDouble(Double::doubleValue).toArray()) );
             stemiData.addQAmplitude( ut.median(data.getQAmplitudeMv().stream().mapToDouble(Double::doubleValue).toArray()));
+
+//            stemiData.addsTElevationMv( ut.findMax(data.getStElevation().stream().mapToDouble(Double::doubleValue).toArray()));
+//            stemiData.addSagittaMv(ut.median(data.getStSagitaMv().stream().mapToDouble(Double::doubleValue).toArray()));
+//            stemiData.addStMorphCode((int) ut.median(data.getStMorphologyCode()));
+//            stemiData.addTombstoneFlag(data.getStTombstoneFlag().contains(true)? 1 : 0);
+//            stemiData.addQrsDuration(ut.median(data.getQrsDuration()));
+//            stemiData.addTAmplitude( ut.medianDouble(data.getTAmplitudeMv()) );
+//            stemiData.addRAmplitude( ut.median(data.getRAmplitudeMv().stream().mapToDouble(Double::doubleValue).toArray()) );
+//            stemiData.addSAmplitude( ut.median(data.getSAmplitudeMv().stream().mapToDouble(Double::doubleValue).toArray()) );
+//            stemiData.addQAmplitude( ut.median(data.getQAmplitudeMv().stream().mapToDouble(Double::doubleValue).toArray()));
 
 
         }
@@ -182,6 +210,7 @@ public class StemiDetection {
         double qrsMedian = ut.medianDouble(stemiData.getQrsDuration());
         String bbb = "None";
         String bbbReason = "";
+//        boolean wideQrs = (qrsMedian >= 112);     // for ANE and CAL qrsMedian was 112
         boolean wideQrs = (qrsMedian >= 100);
 
         //  Compute R/S ratios (guard against divide-by-zero)
@@ -265,7 +294,7 @@ public class StemiDetection {
         // If still empty but strong evidence exists, pick a generic MI:
         if (topLabel.isEmpty() && (tombstonePresent || nElev >= 2))
             topLabel = "ST-Elevation MI ";
-        if (topLabel.isEmpty())
+        if (topLabel.isEmpty() || topLabel.equalsIgnoreCase("STEMI pattern (territory indeterminate)"))
             topLabel = "No STEMI";
 
         String[] normMap = {"anterior","anteroseptal","anterolateral","inferior","inferolateral","lateral"};
@@ -310,7 +339,8 @@ public class StemiDetection {
                 ("DEFINITE") && topLabel.equalsIgnoreCase("No Stemi"))
             mainLine += "INDETERMINATE due to LBBB — " + topLabel + " , " + topStrength;
         else
-            mainLine += topStrength +" , "+ topLabel;
+//            mainLine += topStrength +" , "+ topLabel;
+            mainLine += topLabel;
 
         //  BBB line (no ternary operator)
         String bbLine = "";

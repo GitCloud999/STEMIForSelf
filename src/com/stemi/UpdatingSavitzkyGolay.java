@@ -1,17 +1,16 @@
 package com.stemi;
 
-import com.stemi.libs.CustomQR;
-import com.stemi.libs.FastFourierTransform;
-import com.stemi.libs.MatlabInbuiltFunctions;
-import com.stemi.libs.MatrixFunctions;
+import com.stemi.libs.*;
 
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
+import java.util.stream.IntStream;
 
 public class UpdatingSavitzkyGolay {
 
-    public boolean checkForPointFiveHzNoise(double[][] polySubEcg) {
+    public boolean checkForPointFiveHzNoise(double[][] polySubEcg, double centerDrift) {
         FastFourierTransform fftObj = new FastFourierTransform(500);
         MatlabInbuiltFunctions mf = new MatlabInbuiltFunctions();
         Filters filters = new Filters();
@@ -19,7 +18,7 @@ public class UpdatingSavitzkyGolay {
         LoaderHelper ldh = new LoaderHelper();
         double[] peakValueAndFoundPeakFlag05= new double[2];
         boolean found05HzNoise = false;
-        double freqRange = 0.2;         // +/- tolerance around 0.5 Hz (adjust as needed)
+        double freqRangeDrift = 0.2;         // +/- tolerance around 0.5 Hz (adjust as needed)
         double thresholdAmplitude = 1.0 * 100000;  // amplitude threshold (adjust as needed)
         int len = polySubEcg[0].length;
         double N2 = Math.pow(2, fftObj.customNextPow2(len));
@@ -37,8 +36,8 @@ public class UpdatingSavitzkyGolay {
                 freqAxis[i] = (double) Math.round( ((double) i) * (500.0 / N2) *10000) / 10000 ;
 //                System.out.println(freqAxis[i]);
             }
-            peakValueAndFoundPeakFlag05 = filters.hasNearPeakFrequency(freqAxis, magFft, 0.3
-                    , freqRange, thresholdAmplitude);
+            peakValueAndFoundPeakFlag05 = filters.hasNearPeakFrequencyForPointFiveHz30Oct2025(freqAxis, magFft, centerDrift
+                    , freqRangeDrift, thresholdAmplitude);
             if (peakValueAndFoundPeakFlag05[0] == 1) {
                 found05HzNoise = true;
                 System.out.println("Lead " + leadIdx + " 0.5 Hz interference found (peak0.5 = "
@@ -149,7 +148,9 @@ public class UpdatingSavitzkyGolay {
         double[] xvec = new double[windowSize];
         for (int i = 0; i < windowSize; i++) {
             xvec[i] = -halfWindow + i;
+//            System.out.println(i+"  --------  "+ xvec[i]);
         }
+//        System.out.println("==========================================");
         double[][] A, B;
         //        Build Vandermonde matrix A
         A = new double[polyOrder + 1][windowSize];
@@ -162,14 +163,15 @@ public class UpdatingSavitzkyGolay {
         double[] temp = A[0];
         B[0] = A[1];
         B[1] = temp;
-        Map<String, double[][]> mapSUV = customSvd(B);
+//        Map<String, double[][]> mapSUV = customSvd(B);
+        Map<String, double[][]> mapSUV = customSvdTwo28Oct2025(B);
         double[][] S = mapSUV.get("S");
         double[][] U = mapSUV.get("U");
         double[][] V = mapSUV.get("V");
         double[] bNormed = customNorm(B);
 
-        double tol = Math.max(B.length, B[0].length) * Math.ulp(bNormed[0]);
-        double tol2 = Math.max(B.length, B[0].length) * Math.ulp(bNormed[1]);
+//        double tol = Math.max(B.length, B[0].length) * Math.ulp(bNormed[0]);
+        double tol = Math.max(B.length, B[0].length) * Math.ulp(bNormed[1]);
 //        System.out.println(tol);
 //        System.out.println(tol2);
         double[][] sPinv = new double[B[0].length][B.length];
@@ -260,6 +262,112 @@ public class UpdatingSavitzkyGolay {
 //        ldh.viewData(basis);
 //        System.out.println(multiplyOne.length+"         ,         "+multiplyOne[0].length);
     }
+
+    private Map<String, double[][]> customSvdTwo28Oct2025(double[][] a) {
+        int m = a.length;
+        int n = a[0].length;
+        MatrixFunctions mt = new MatrixFunctions();
+        double[][] aTranspose = mt.transpose(a);
+//        System.out.println(aTranspose.length+"          ,           "+a.length);
+        double[][] aAtMult = mt.multiplyMatrices(aTranspose.length, aTranspose[0].length, aTranspose, a.length, a[0].length, a);
+        double[][] aTAMult = mt.multiplyMatrices(a.length, a[0].length, a, aTranspose.length, aTranspose[0].length, aTranspose);
+// Cannot view the whole 501 * 501 matrix through loaderHelper view() method, If needed
+//  then use view by using 1D array. Ex - aAtMult[0], aAtMult[1]
+        Map<String, double[][]> map = customEigen(aTAMult);
+        double[][] V = map.get("v");
+        double[][] Dv = map.get("d");
+        System.out.println("Custom Eigne 500");
+        double[] lambda = new double[Dv.length];
+        for (int i = 0; i < Dv.length; i++) {
+            for (int j = 0; j < Dv[0].length; j++) {
+                if (i == j & Dv[i][j] > 0)
+                    lambda[i] = Dv[i][j];
+            }
+        }
+        double[][] vRaw = new double[V.length][V[0].length];
+        vRaw[0][0] = V[0][1];
+        vRaw[0][1] = -1 * V[0][0];
+        vRaw[1][0] = V[1][1];
+        vRaw[1][1] = V[1][0];
+//        double[] arr = {40, 30, 22, 32, 44, 28};
+        Object[] obj = getDescendingSortedValueAndIndex(lambda);
+        int[] indices = (int[]) obj[1];
+        double[] values = (double[]) obj[0];
+        double[] lambdaSqrt = Arrays.stream(lambda).map(e -> (double) Math.sqrt(e)).toArray();
+        sorting(lambdaSqrt, "descen");
+        Utility ut = new Utility();
+        double tol = Math.max(a.length, a[0].length) * Math.ulp(ut.findMax(lambdaSqrt));
+        int r = Arrays.stream(lambdaSqrt).mapToInt( e -> (e > tol) ? 1 : 0).sum();
+
+        double[][] dd = new double[2][2];
+        double[] s;
+        double[][] UNew = new double[a[0].length][a[0].length];
+        double ni = 0;
+        if (r > 0)
+        {
+            s = ut.fillDataIntoArray(0, r-1, lambdaSqrt);
+            dd = customDiagonal(s);
+        }
+        for (int i = 0; i < r; i++) {
+            ni = customNorm(a[1]);
+            if (ni > 0) {
+                double sq = lambdaSqrt[i];
+                double[] localArr = a[a.length - 1 - i];
+                UNew[i] = Arrays.stream(localArr).map( e -> (double) (Math.round((e / sq) * 10000) ) / 10000).toArray();
+            } else
+                UNew[i] = a[1];
+        }
+        double[][] S = new double[m][n];
+        for (int i = 0; i < S.length; i++) {
+            for (int j = 0; j < S[0].length; j++) {
+                if (i == j)
+                    S[i][j] = (double) Math.round(lambdaSqrt[i] * 10000 ) / 10000;
+            }
+        }
+
+
+//        Map<String, double[][]> map2 = customEigenfor500(aAtMult);
+//        double[][] U = map2.get("u");
+//        double[][] Du = map2.get("du");
+//        LoaderHelper ldh = new LoaderHelper();
+////        ldh.viewData(map2.get("d")[0]);
+//        double[] sv = new double[map.get("d").length];
+//        for (int i = 0; i < map.get("d").length; i++) {
+//            for (int j = 0; j < map.get("d")[0].length; j++) {
+//                if (i == j)
+//                    sv[i] = Math.sqrt(map.get("d")[i][j]);
+//            }
+//        }
+//        sorting(sv, "descen");
+//        int k = Math.min(m, n);
+//        double[][] S = new double[m][n];
+//        for (int i = 0; i < S.length; i++) {
+//            for (int j = 0; j < S[0].length; j++) {
+//                if (i == j)
+//                    S[i][j] = (double) Math.round(sv[i] * 10000 ) / 10000;
+//            }
+//        }
+//        for (int i = 0; i < V.length; i++) {
+//            double norm = customNorm(V[i]);
+//            for (int j = 0; j < V[0].length; j++) {
+//                V[i][j] = (double) Math.round((V[i][j] / norm) * 10000) / 10000;
+//            }
+//        }
+//        for (int i = 0; i < U.length; i++) {
+//            double norm = customNorm(U[i]);
+//            for (int j = 0; j < U[0].length; j++) {
+//                U[i][j] = (double) Math.round((U[i][j] / norm) * 10000) / 10000;
+//            }
+//        }
+        map.clear();
+        map.put("U", UNew);
+        map.put("V", vRaw);
+        map.put("S", S);
+        return map;
+//        ldh.viewData(U[499]);
+    }
+
+
 
     private double customNorm(double[] arr) {
         double sum = 0.0;
@@ -611,6 +719,31 @@ public class UpdatingSavitzkyGolay {
         map.put("du", d);
 
         return map;
+    }
+
+    private Object[] getDescendingSortedValueAndIndex(double[] arr) {
+        int[] descendedIndex = IntStream.range(0, arr.length).map(e -> e ).toArray();
+        double[] descendedArr = arr.clone();
+        for (int i = 0; i < arr.length - 1; i++) {
+           int maxIndex = i;
+           double localMaxValue = descendedArr[maxIndex];
+            for (int j = i+1; j < arr.length; j++) {
+                if (descendedArr[j] > descendedArr[i] && descendedArr[j] > localMaxValue) {
+                    maxIndex = j;
+                    localMaxValue = descendedArr[maxIndex];
+                }
+            }
+            // swap for descending array
+            double temp = descendedArr[i];
+            descendedArr[i] = descendedArr[maxIndex];
+            descendedArr[maxIndex] = temp;
+
+            // swap for indices
+            int tempIndex = descendedIndex[i];
+            descendedIndex[i] = descendedIndex[maxIndex];
+            descendedIndex[maxIndex] = tempIndex;
+        }
+        return new Object[]{ descendedArr, descendedIndex };
     }
 
 }

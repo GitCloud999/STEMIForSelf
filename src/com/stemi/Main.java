@@ -17,7 +17,7 @@ public class Main {
 
 //        String fileName = "1722569222110000_raw.txt";
 //        String fileName = "1722573078570000_raw.txt";
-        String fileName = "ANE_20000_250hz_raw.txt";
+//        String fileName = "ANE_20000_250hz_raw.txt";
 //        String fileName = "ANE_20001_250hz_raw.txt";
 //        String fileName = "ANE_20002_250hz_raw.txt";
 //        String fileName = "CAL_05000_250hz_raw.txt";
@@ -29,10 +29,10 @@ public class Main {
 //        String fileName = "CAL_20100_250hz_raw.txt";
 //        String fileName = "CAL_20110_250hz_raw.txt";
 //        String fileName = "CAL_20160_250hz_raw.txt";
-//        String fileName = "CAL_20200_250hz_raw.txt";
+//        String fileName = "CAL_20200_250hz_raw.txt";  // -ve R
 //        String fileName = "CAL_20210_250hz_raw.txt";
 //        String fileName = "CAL_20260_250hz_raw.txt";
-//        String fileName = "CAL_20500_250hz_raw.txt";
+        String fileName = "CAL_20500_250hz_raw.txt";
 //        String fileName = "CAL_20502_250hz_raw.txt";
 //        String fileName = "CAL_30000_250hz_raw.txt";
 //        String fileName = "CAL_40000_250hz_raw.txt";
@@ -340,6 +340,47 @@ public class Main {
 //        String fileName = "1756709600485200-Atrial-report_twelve_lead_with_replicas.txt";
 //        String fileName = "1756710176499470-3rd deg Heart-report_twelve_lead_with_replicas.txt";
 
+//        ------------------ Production App Database ------------------------------
+//        String fldrNew = "D:\\RAHUL\\DownloadsRahul\\dataSets250Hz_9ColumnDataSeperatedWithSpace\\";
+//        String fileName = "1759142941431440-Wave 12 A fib-report_twelve_lead_with_replicas.txt";
+//        String fileName = "1759143185169210-Wave 14 A-report_twelve_lead_with_replicas.txt";
+//        String fileName = "1759143326304960-Wave 15 Sinus-report_twelve_lead_with_replicas.txt";
+//        String fileName = "1759143923554210-Wave 48 3rd degree AV-report_twelve_lead_with_replicas.txt";
+//        String fileName = "1759144595369660-I03-report_twelve_lead_with_replicas.txt";
+//        String fileName = "1759145061220850-I09-report_twelve_lead_with_replicas.txt";
+//        String fileName = "1759145291005770-I10-report_twelve_lead_with_replicas.txt";
+//        String fileName = "1759145352812600-I11-report_twelve_lead_with_replicas.txt";
+//        String fileName = "1759145436254210-I23-report_twelve_lead_with_replicas.txt";
+//        String fileName = "1759145585607110-I33-report_twelve_lead_with_replicas.txt";
+//        String fileName = "1759146867735150-I41-report_twelve_lead_with_replicas.txt";
+//        String fileName = "1759148865016340-I49-report_twelve_lead_with_replicas.txt";
+//        String fileName = "1759149234108860-I50-report_twelve_lead_with_replicas.txt";
+//        String fileName = "1759149485383630-I53-report_twelve_lead_with_replicas.txt";
+//        String fileName = "1759149556221670-I59-report_twelve_lead_with_replicas.txt";
+//        String fileName = "1759149683432380-I72-report_twelve_lead_with_replicas.txt";
+//        String fileName = "1759149986439980-S0064lre-report_twelve_lead_with_replicas.txt";
+//        String fileName = "1759150115303650-S0068lre-report_twelve_lead_with_replicas.txt";
+//        String fileName = "1759150203025890-S0088lre-report_twelve_lead_with_replicas.txt";
+//        String fileName = "1759150287227390-S0091lre-report_twelve_lead_with_replicas.txt";
+//        String fileName = "1759150367973850-S0093lre-report_twelve_lead_with_replicas.txt";
+//        String fileName = "1759150477807810-S0130lre-report_twelve_lead_with_replicas.txt";
+        //        String fileName = "1759908520354800-Sarthak-report_twelve_lead (1).txt";
+//        String fileName = "1759909012586580-Sarthak-report_twelve_lead (1).txt";
+//        String fileName = "1759910826593610-Devang-report_twelve_lead.txt";
+//        String fileName = "1760085132741760-Shahil-report_twelve_lead_with_replicas.txt";
+//        String fileName = "1760086071610300-Paras-report_twelve_lead_with_replicas.txt";
+//        String fileName = "1760086661515568-Atul-report_twelve_lead_with_replicas.txt";
+//        String fileName = "1760086793073260-Atul-report_twelve_lead_with_replicas.txt";
+//        String fileName = "1760087354644932-Sahil-report_twelve_lead_with_replicas.txt";
+//        String fileName = "23 C1760087453822480-Ritik-report_twelve_lead_with_replicas.txt";
+//        String fileName = "23 C1760087978209599-Vaibhav-report_twelve_lead_with_replicas.txt";
+//        String fileName = "23 C1760088095995750-Vaibhav-report_twelve_lead_with_replicas.txt";
+
+//        -------------------------------- Production_app_data_sept_oct_NOV_2025_9C --------------------------------
+//        String fldrNew = "D:\\RAHUL\\DownloadsRahul\\dataSets250Hz_9ColumnDataSeperatedWithSpace\\Production_app_data_sept_oct_NOV_2025_9C\\";
+//        String fileName = "1762939007411730-Cal 10000-report_twelve_lead_with_replicas.txt";
+//        String fileName = "1762939594052580-Cal-report_twelve_lead_with_replicas.txt";    //20110
+
 
         LoaderHelper ldh = new LoaderHelper();
         TwelveLeadEcgData twelveLeadEcgData = ldh.readTextFileIntoTwelveLeadEcgData(fldrNew, fileName);
@@ -375,8 +416,7 @@ public class Main {
             }
 
             @Override
-            public void onCompletedLead2MetaData(TwelveLeadEcgData twelveLeadEcgData, HashMap<String, Double> hashMap, String arrhythmiaSummary,
-                                                 String stemiResult, String ischemiaResult) {
+            public void onCompletedLead2MetaData(TwelveLeadEcgData twelveLeadEcgData, HashMap<String, Double> hashMap, String finalSummary) {
 
 //                System.out.println("======================= Summary From Lead 2 ======================================");
 //                System.out.println("======================= Average Summary From Lead1 to V6 ======================================");
@@ -387,13 +427,7 @@ public class Main {
                 System.out.println("QT Interval : "+hashMap.get("qtInterval") );
                 System.out.println("QTc Interval : "+hashMap.get("qtcInterval") );
                 System.out.println();
-                System.out.println(arrhythmiaSummary);
-                System.out.println();
-                System.out.println("----------------------------- Final Stemi Decission --------------------------------");
-                System.out.println(stemiResult);
-                System.out.println();
-                System.out.println("------------------------- Ischemia Final Result --------------------------------");
-                System.out.println(ischemiaResult);
+                System.out.println(finalSummary);
 
             }
         });

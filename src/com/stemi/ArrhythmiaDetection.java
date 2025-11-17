@@ -157,7 +157,7 @@ public class ArrhythmiaDetection {
                         double curr = qrsLocal.get(j);
                         if (prev != 0)
                             cycleQRSVariabilityPercent.add( (double) Math.round( ( (Math.abs(curr - prev)) / prev ) * 100 * 100 ) /100 );
-                        cycleQRSVariabilityPercent.add(0.0);
+//                        cycleQRSVariabilityPercent.add(0.0);
                     }
 
 
@@ -226,13 +226,13 @@ public class ArrhythmiaDetection {
                         localPresence = "Absent";
                     double globalPMean = ut.mean(pAmplitudes);
                     String globalPPresence = "Present";
-                    if (globalPMean < 0.03 )
+                    if (globalPMean < 0.027 )
                         globalPPresence = "Absent";
                     arrhythmiaValues.addPWavePresenceSingleValue(globalPPresence);
                     arrythmias.add("P Wave: " + globalPPresence);       // index 8 P Wave Presence ?
                     //  CASE 9: Sinus vs Non-Sinus P Wave Detection
                     String globalPWaveType = "Unknown";
-                    if (globalPMean > 0.05)
+                    if (globalPMean > 0.027)
                         globalPWaveType = "Sinus";
                     else
                         globalPWaveType = "Non-Sinus";
@@ -251,7 +251,7 @@ public class ArrhythmiaDetection {
     //                ldh.viewData(pAmplitudesSecondListArray);
                     double globalPMean = ut.mean(pAmplitudesSecondListArray);
                     String globalPWaveType = "Unknown";
-                    if (globalPMean <= 0)
+                    if (globalPMean <= 0.027)
                         globalPWaveType = "Non-Sinus";
                     else
                         globalPWaveType = "Sinus";
@@ -276,11 +276,12 @@ public class ArrhythmiaDetection {
                             if (segment.length < 2)
                                 continue;
                             // Smooth with a small moving average
-                            int windowSize = 20;
+                            int windowSize = 10;
                             double[] windowArray = new double[windowSize];
                             windowArray = Arrays.stream(windowArray).map(e -> (double) 1 / windowSize).toArray();
                             Filters filters = new Filters();
                             double[] smoothedSegment = filters.myFIRFilter(windowArray, new double[]{1}, segment);
+//                            double[] smoothedSegment2 = filters.customFiltFiltNew(windowArray, new double[]{1}, segment);
                             ArrayList<Integer> candidateIdxs = new ArrayList<Integer>();
                             ArrayList<Double> candidateAmps = new ArrayList<Double>();
                             double segmentMean = ut.mean(smoothedSegment);
@@ -295,7 +296,8 @@ public class ArrhythmiaDetection {
                             }
                             if (candidateIdxs.isEmpty())
                                 continue;
-                            List<Integer> candidateIdxsNew = candidateIdxs.stream().map(e -> e + prevTEnd).toList();
+//                            List<Integer> candidateIdxsNew = candidateIdxs.stream().map(e -> e + prevTEnd).toList();
+                            List<Integer> candidateIdxsNew = candidateIdxs.stream().map(e -> e + leftIdx).toList();
                             List<Double> candidateAmpsMv = candidateAmps.stream().map(e -> e * ((double) 1 / 6250)).toList();
                             double pMainAmp = pAmplitudesSecondListArray[j];
                             double tol = 0.10;
@@ -310,26 +312,66 @@ public class ArrhythmiaDetection {
                             int extraP = Math.max(0, similar_candidates.size() - 1);
                             extraPCounts[j] = extraP;
     //                        Compute intra-atrial rate if we have at least two similar candidates
-                            if (similar_candidates.size() > 1) {
+                            //    % -------- Intra-atrial rate from (similar_candidates + main P) --------
+                            //     % Build PP set that always includes the main P peak of this cycle
+
+                            //            pp_peaks = similar_candidates(:);
+                            //            mainPidx = cardiac_table.P_Peak_idx(j);
+                            //            if ~isnan(mainPidx)
+                            //                pp_peaks = [pp_peaks; mainPidx];
+                            //            end
+
+                            ArrayList<Integer> pPeaks = new ArrayList<Integer>(similar_candidates);
+                            int mainPIdx = data.getPPeakIndex(j);
+                            if (mainPIdx != -1)
+                                pPeaks.add(mainPIdx);
+                            int[] pPeaksArr = pPeaks.stream().mapToInt(Integer::intValue).toArray();
+                            Arrays.sort(pPeaksArr);
+                            pPeaksArr = Arrays.stream(pPeaksArr).distinct().toArray();
+
+                            //  Simple intra-atrial rate (no PP-CV coupling)
+                            if (pPeaksArr.length > 1) {
+                                int[] cyclePpIntervals = ut.differentaition(pPeaksArr);
+                                double[] cyclePpIntervalsDouble = IntStream.of(cyclePpIntervals).mapToDouble(e -> e / (double) fs).toArray();
+                                double meanCycleInterval = ut.mean(cyclePpIntervalsDouble);
+                                if (meanCycleInterval > 0) {
+                                    double intraRateCycle = 60 / meanCycleInterval;
+                                    if (intraRateCycle <= 1000)
+                                        intraRates[j] = intraRateCycle;
+                                    else {
+                                        intraRates[j] = 0;
+                                        System.out.println("Warning : Lead_" + i + " : Unrealistic intra atrial rate " + intraRateCycle + " bpm) replaced with 0.");
+                                    }
+                                }   else {
+                                        intraRates[j] = 0;
+                                        cvPpArray[j] = 0;
+                                    }
+                                }
+                            else
+                                intraRates[j] = 0;
+                            }
+
+
+//                            if (similar_candidates.size() > 1) {
                                 // Code needs to be updated here......
                                 // Case 10 : Issue
-                                int[] cyclePpIntervals = ut.differentaition(similar_candidates.stream().mapToInt(Integer::intValue).toArray());
-    //                            int[] cyclePpIntervals = ut.differentaition(similar_candidates.stream().map(e -> e/500).mapToInt(Integer::intValue).toArray());
-                                double[] cyclePpIntervalsDouble = IntStream.of(cyclePpIntervals).mapToDouble(e -> e / (double) fs).toArray();
-                                double intraRateCycle = 60 / ut.mean(cyclePpIntervalsDouble);
+//                                int[] cyclePpIntervals = ut.differentaition(similar_candidates.stream().mapToInt(Integer::intValue).toArray());
+//    //                            int[] cyclePpIntervals = ut.differentaition(similar_candidates.stream().map(e -> e/500).mapToInt(Integer::intValue).toArray());
+//                                double[] cyclePpIntervalsDouble = IntStream.of(cyclePpIntervals).mapToDouble(e -> e / (double) fs).toArray();
+//                                double intraRateCycle = 60 / ut.mean(cyclePpIntervalsDouble);
     //                                cvPpArray[j] = (ut.calculateSD(cyclePpIntervals) / ut.mean(cyclePpIntervalsDouble)) * 100;
-                                cvPpArray[j] = (ut.calculateSD(cyclePpIntervals) / ut.mean(cyclePpIntervalsDouble)) * 100;
-                                if (intraRateCycle <= 1000)
-                                    intraRates[j] = intraRateCycle;
-                                else {
-                                    intraRates[j] = 0;
-                                    System.out.println("Warning : Lead_" + i + " : Unrealistic intra atrial rate " + intraRateCycle + " bpm) replaced with 0.");
-                                }
-                            } else {
-                                intraRates[j] = 0;
-                                cvPpArray[j] = 0;
-                            }
-                        }
+//                                cvPpArray[j] = (ut.calculateSD(cyclePpIntervals) / ut.mean(cyclePpIntervalsDouble)) * 100;
+//                                if (intraRateCycle <= 1000)
+//                                    intraRates[j] = intraRateCycle;
+//                                else {
+//                                    intraRates[j] = 0;
+//                                    System.out.println("Warning : Lead_" + i + " : Unrealistic intra atrial rate " + intraRateCycle + " bpm) replaced with 0.");
+//                                }
+//                            } else {
+//                                intraRates[j] = 0;
+//                                cvPpArray[j] = 0;
+//                            }
+//                        }
                         int[] validCyclesNew = new int[validCycles.length];
                         for (int j = 0; j < validCycles.length; j++) {
                             if (validCycles[j] && (extraPCounts[j] > 0))
@@ -539,18 +581,32 @@ public class ArrhythmiaDetection {
             , ArrhythmiaValues values, HashMap<String, Double> map) {
         ClassificationResults classificationResults = new ClassificationResults();
         for (int i = 0; i < values.getLeadCol().size(); i++) {
-//        for (int i = 7; i < 8; i++) {
+//        for (int i = 5; i < 6; i++) {
             //  Compute average heart rate from the cardiac data (using the Heart_Rate_bpm column)
 //            int i = values.getLeadSingleValue(k);
             CardiacData data = cardiacStruct.getLeadWiseCardiacStructLeadRangeFrom0To8(i);
             classificationResults.addLead(values.getLeadSingleValue(i));
-//            if (data != null) {
-//            if (!values.getHeartRateSingleValue(i).equalsIgnoreCase("NATD") ) {
-//                double averageHeartRate = -1;
 
             if (!data.getHeatRate().isEmpty())
             {
                double averageHeartRate = ut.findMean(data.getHeatRate());
+               // Calculating rtOkMajority
+                boolean rtOkMajority = true;
+                if ( !data.getRAmplitudeMv().isEmpty() && !data.getTAmplitudeMv().isEmpty()) {
+                    double ampMin = 0.5;
+                    double tNegativeThreshold = ampMin;
+                    ArrayList<Double> rAmp = data.getRAmplitudeMv();
+                    ArrayList<Double> tAmp = data.getTAmplitudeMv();
+                    int[] discodant = IntStream.range(0, rAmp.size()).map(e -> (rAmp.get(e) > 0 &&
+                            tAmp.get(e) < -tNegativeThreshold) ? 1 : 0).toArray();
+                    for (int j = 0; j < discodant.length; j++) {
+                        if (discodant[j] == 1) {
+                            rtOkMajority = false;
+                            break;
+                        }
+                    }
+                }
+
 
 //                else {
 //                    System.out.println("HeartRate list is empty in arrythmiaClassifier() for Lead_" + values.getLeadSingleValue(i));
@@ -600,12 +656,12 @@ public class ArrhythmiaDetection {
 
                 //  --- PAC Detection ---
                 if (!values.getLocalRRVariabilityCol().isEmpty() && !values.getGlobalRRVariabilityCol().isEmpty() &&
-                        localRrVariability >= 15 && globalRrVariability <= 35 && (isNarrow || isNormal) ) {
+                        localRrVariability >= 21 && globalRrVariability <= 35 && (isNarrow || isNormal) ) {
                     if (values.getPWavePresenceSingleValue(i).equalsIgnoreCase("Absent"))
                         classificationResults.addPac("Premature Atrial Complex");
 
                     else if (values.getPWavePresenceSingleValue(i).equalsIgnoreCase("Present") &&
-                            localRrVariability >= 10 && values.getPRVarSingleValue(i) > 30)
+                            localRrVariability >= 25 && values.getPRVarSingleValue(i) > 30)
                         classificationResults.addPac("Premature Atrial Complex");
                     else
                         classificationResults.addPac("No PAC Found");
@@ -617,8 +673,8 @@ public class ArrhythmiaDetection {
 //                if ( (localRrVariability > 6 && qrsVar > 10 ) || (localRrVariability > 3.5 && isWide) ||
 //                        (localRrVariability > 3.5 && qrsVar > 15 && isNormal) || (isNormal && values.getPWavePresenceSingleValue(i)
 //                        .equalsIgnoreCase("Absent") && qrsVar > 15) )
-                if ( ( localRrVariability > 25 && qrsVar > 25 ) || (localRrVariability > 15 && isWide) || (localRrVariability > 15 && qrsVar > 25 && isNormal)
-                    || ( isNormal && values.getPWavePresenceSingleValue(i).equalsIgnoreCase("Absent") && qrsVar > 25)
+                if ( ( localRrVariability > 21 && qrsVar > 45 ) || (localRrVariability > 15 && isWide) || (localRrVariability > 15 && qrsVar > 25 && isNormal)
+                    || ( isNormal && values.getPWavePresenceSingleValue(i).equalsIgnoreCase("Absent") && qrsVar > 50)
                 )
                     classificationResults.addVpc("Ventricular Premature Complex");
                 else
@@ -717,8 +773,8 @@ public class ArrhythmiaDetection {
                 //  --- Mobitz Type 2 AV Block Detection ---
                 double interAtrialRateVal = values.getInterAtrialRateSingleValue(i);
 //                double zz = values.getLocalVariabilitySingleValue(i);
-                if (isProlonged && qrsVar < 57 && values.getLocalVariabilitySingleValue(i) > 19 &&
-                        ( values.getPRVarSingleValue(i) < 16 && (interAtrialRateVal > 25 && interAtrialRateVal < 50) )
+                if (isProlonged && qrsVar < 57 && values.getLocalVariabilitySingleValue(i) > 14 &&
+                        ( values.getPRVarSingleValue(i) < 25 && (interAtrialRateVal > 25 && interAtrialRateVal < 50) )
                 )
                     classificationResults.addMobitzType2AVBlock("Mobitz Type II AV Block");
                 else
@@ -743,7 +799,7 @@ public class ArrhythmiaDetection {
                     classificationResults.addIdioventricularRhythm("No Idioventricular Rhythm Found");
 
                 //  --------- Accelerated Idioventricular Rhythm Detection ---------
-                if (averageHeartRate >= 50 && averageHeartRate <= 100 && localRrVariability <= 10 && isWide &&
+                if (averageHeartRate >= 50 && averageHeartRate <= 100 && localRrVariability <= 21 && isWide &&
                         values.getPWaveTypeSingleValue(i).equalsIgnoreCase("Non-Sinus") &&
                         values.getPWavePresenceSingleValue(i).equalsIgnoreCase("Absent"))
                     classificationResults.addAcceleratedIdioventricularRhythm("Accelerated Idioventricular Rhythm");
@@ -751,16 +807,16 @@ public class ArrhythmiaDetection {
                     classificationResults.addAcceleratedIdioventricularRhythm("No Accelerated Idioventricular Rhythm Found");
 
                 //   ---------- Junctional Rhythm Detection ----------------
-                if (averageHeartRate >= 60 && averageHeartRate <= 100 && localRrVariability < 10
+                if (averageHeartRate >= 40 && averageHeartRate <= 99 && localRrVariability < 10
                         && (isNormal || isNarrow) && values.getPWaveTypeSingleValue(i).equalsIgnoreCase("non-sinus"))
                     classificationResults.addJunctionalRhythm("Junctional Rhythm");
                 else
                     classificationResults.addJunctionalRhythm("No Junctional Rhythm Found");
 
                 //  --- Atrial Flutter Detection ---
-                if ( (localRrVariability >= 22 && intraAtrialRateValue >= 180 && intraAtrialRateValue < 350)
+                if ( (localRrVariability >= 25 && intraAtrialRateValue >= 180 && intraAtrialRateValue < 350)
                         ||
-                      ( localRrVariability <= 10 && intraAtrialRateValue >= 120 && intraAtrialRateValue < 350 )
+                      ( localRrVariability <= 3 && intraAtrialRateValue >= 120 && intraAtrialRateValue < 350 )
                    )
                     classificationResults.addAtrialFlutter("Atrial Flutter");
                 else
@@ -786,19 +842,19 @@ public class ArrhythmiaDetection {
                         classificationResults.addAtrialFibrillation("RVR Atrial Fibrillation");
                     else
                         classificationResults.addAtrialFibrillation("No Atrial Fibrillation Found");
-                } else if (averageHeartRate < 60 && localRrVariability >= 20 && globalRrVariability >= 12) {
+                } else if (averageHeartRate < 60 && localRrVariability >= 20 && globalRrVariability >= 15) {
                     if (values.getPWaveTypeSingleValue(i).equalsIgnoreCase("Sinus") && intraAtrialRateValue > 350
                             || values.getInterAtrialRateSingleValue(i) > 250)
                         classificationResults.addAtrialFibrillation("Bradycardic Atrial Fibrillation");
                     else if (values.getPWaveTypeSingleValue(i).equalsIgnoreCase("Non-Sinus") && values.
-                            getPWavePresenceSingleValue(i).equalsIgnoreCase("Absent"))
+                            getPWavePresenceSingleValue(i).equalsIgnoreCase("Absent") && globalRrVariability >= 25)
                         classificationResults.addAtrialFibrillation("Bradycardic Atrial Fibrillation");
                     else
                         classificationResults.addAtrialFibrillation("No Atrial Fibrillation Found");
                 } else if (averageHeartRate >= 60 && averageHeartRate < 100 && localRrVariability >= 30 &&
                         globalRrVariability >= 15) {
-                    if (values.getPWaveTypeSingleValue(i).equalsIgnoreCase("Non-Sinus") && values.getPWavePresenceSingleValue(i).
-                            equalsIgnoreCase("Absent") && values.getInterAtrialRateSingleValue(i) > 250 || intraAtrialRateValue > 350)
+                    if ( (values.getPWaveTypeSingleValue(i).equalsIgnoreCase("Non-Sinus") && values.getPWavePresenceSingleValue(i).
+                            equalsIgnoreCase("Absent") )  || (values.getInterAtrialRateSingleValue(i) > 250 || intraAtrialRateValue > 350) && rtOkMajority)
                         classificationResults.addAtrialFibrillation("Atrial Fibrillation");
                     else
                         classificationResults.addAtrialFibrillation("No Atrial Fibrillation Found");
@@ -828,10 +884,12 @@ public class ArrhythmiaDetection {
 
                     //  --- Sinus Rhythm Detection ---
                     if (averageHeartRate >= 60 && averageHeartRate <= 100 && values.getPWaveTypeSingleValue(i).
-                            equalsIgnoreCase("Sinus") && isNormal || isNarrow || isWide)
-                        classificationResults.addSinusRhythm("Sinus Rhythm Detected");
+                            equalsIgnoreCase("Sinus") && (isNormal || isNarrow || isWide) )
+//                        if (globalRrVariability > 20 && localRrVariability > 35)
+                            classificationResults.addSinusRhythm("Sinus Rhythm Detected");
                     else
                         classificationResults.addSinusRhythm("No Sinus Rhythm Found");
+
 
                     //  --- MultiPClassification ---
                     // check below condition as value is zero
@@ -845,7 +903,7 @@ public class ArrhythmiaDetection {
                     classificationResults.addMultiPClassification("NA");
                 }
 
-                System.out.println("Arrhythmia classification function accessed all required data successfully.");
+//                System.out.println("Arrhythmia classification function accessed all required data successfully.");
             } else {
                 System.out.println("HeartRate list is empty in arrythmiaClassifier() for Lead_" + values.getLeadSingleValue(i));
                 classificationResults.addTachycardia("NATD");
@@ -939,10 +997,12 @@ public class ArrhythmiaDetection {
 //        else if (heartRate < 45 || heartRate > 150)
 //            summarySentence = "Abnormal ECG." + "\n"+summarySentence+ "\nCritical ECG, Heart Rate :"+heartRate;
         else
-            summarySentence = "Abnormal ECG." + "\n"+summarySentence+"\n If you feel chest pain, palpitations, " +
-            "breathlessness, or dizziness, take an Aspirin 150 mg (if not allergic) and consult your doctor. If the ECG" +
-            " is abnormal but you have no symptoms, repeat the ECG every 3 hours. If it stays abnormal, see your doctor." +
-            " Further tests like an echocardiogram or treadmill test may be advised.";
+            summarySentence = "Abnormal ECG." + "\n"+summarySentence;
+//            summarySentence = "Abnormal ECG." + "\n"+summarySentence+"\n If you feel chest pain, palpitations, " +
+//            "breathlessness, or dizziness, take an Aspirin 150 mg (if not allergic) and consult your doctor. If the ECG" +
+//            " is abnormal but you have no symptoms, repeat the ECG every 3 hours. If it stays abnormal, see your doctor." +
+//            " Further tests like an echocardiogram or treadmill test may be advised.";
+
 //        onResultCompleteListener.onCompletedLead2MetaData(twelveLeadEcgData, map, summarySentence);
         return summarySentence;
     }
@@ -1079,7 +1139,7 @@ public class ArrhythmiaDetection {
 
     //    --------------------------------------- Helper Methods --------------------------------------------------
     public String classifyPWavePresence(double[] pAmplitudes) {
-        double threshold = 0.03;
+        double threshold = 0.027;
         String pPresence = "NA";
         if (pAmplitudes.length == 0)
             return pPresence;

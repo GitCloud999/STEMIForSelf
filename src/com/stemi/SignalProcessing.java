@@ -11,6 +11,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.stream.Collectors;
 import java.util.stream.DoubleStream;
+import java.util.stream.IntStream;
 
 public class SignalProcessing {
 
@@ -45,17 +46,16 @@ public class SignalProcessing {
     void filterProcessing(double[][] dataArray, OnResultCompleteListener onResultCompleteListener) {
         //   Filter Parameters
         double Fs = 500;        // Sampling frequency (Hz)
-        double f_low = 150;     // Low-pass filter cutoff frequency (Hz)
-        double f_high = 0.5;    // High-pass filter cutoff frequency (Hz)
+        double fLow = 150;     // Low-pass filter cutoff frequency (Hz)
+        double fHigh = 0.3;    // High-pass filter cutoff frequency (Hz)
+        AutoChosingFilterCorners autoChosingFilterCorners = new AutoChosingFilterCorners();
         Filters filters = new Filters();
-//        double[][] lowPassFilteredData = new double[dataArray.length][dataArray[0].length];
-//        double[][] sgData = new double[dataArray.length][dataArray[0].length];
-//        double[][] notchFilteredData = new double[dataArray.length][dataArray[0].length];
-//        double[][] finalData = new double[dataArray.length][dataArray[0].length];
-        double[][] sgData, finalData;
+        double[] lpfcAndHpfc = autoChosingFilterCorners.detectingFilterCorners(dataArray,Fs, filters);
+        fLow = lpfcAndHpfc[0];
+        fHigh = lpfcAndHpfc[1];
+        double[][] sgData, finalData, calculationData;
         try {
-            double[][] lowPassFilteredData = filters.lowpass_filter_all(dataArray, Fs, f_low);
-            int windowSizeForSavitzky = 501;
+            double[][] lowPassFilteredData = filters.lowpass_filter_all(dataArray, Fs, fLow);
             int polynomialOrder = 2;
             double[][] polySubData = filters.polynomialBaseLineSubtraction(lowPassFilteredData, polynomialOrder);
             lowPassFilteredData = null;
@@ -63,39 +63,87 @@ public class SignalProcessing {
 //            ldh.viewData(polySubData);
 
             UpdatingSavitzkyGolay upt = new UpdatingSavitzkyGolay();
-            boolean foundPointFiveHzNoise = upt.checkForPointFiveHzNoise(polySubData);
+            boolean foundPointFiveHzNoise = upt.checkForPointFiveHzNoise(polySubData, fHigh);
             if (foundPointFiveHzNoise) {
-                int sgPolyOrder = 1;
-//                double[] sgFilter = upt.calculateSavGolCoefficients(windowSizeForSavitzky, sgPolyOrder);
-                double[] sgFilterNew = upt.customCalculateSavGolCoefficients(windowSizeForSavitzky, sgPolyOrder);
+                //  baseSeconds = max(0.5, min(4.0, 4.0 / max(hp_fc, 0.05)));
+                //    window_size = 2*floor((baseSeconds*Fs)/2) + 1;   % odd
+                //    window_size = min(window_size, 501);             % cap for speed
+                //    window_size = max(window_size, 21);              % avoid tiny kernels
+                double baseSeconds = Math.max(0.5, Math.min(4, 4 / Math.max(fHigh, 0.05)));
+                int windowSizeForSavitzky = 2 * (int) Math.floor(baseSeconds * Fs / 2) + 1;
+                windowSizeForSavitzky = Math.min(windowSizeForSavitzky, 501);
+                windowSizeForSavitzky = Math.max(windowSizeForSavitzky, 21);
 
-//                double[][] ecgFilteredAfterFastSavitzky = filters.fastSavitzkyGolayEcg(polySubData, sgFilter);
-                sgData = filters.fastSavitzkyGolayEcg(polySubData, sgFilterNew);
+                int sgPolyOrder = 1;
+                //1) SG smoothing (baseline-like) ----------
+                double[] sgFilterNew = upt.customCalculateSavGolCoefficients(windowSizeForSavitzky, sgPolyOrder);
+//                sgData = filters.fastSavitzkyGolayEcg(polySubData, sgFilterNew);
+                sgData = filters.fastSavitzkyGolayBaseline(polySubData, sgFilterNew);
+                if (windowSizeForSavitzky >= 501 && fHigh < 0.25)
+                    sgData = filters.fastSavitzkyGolayBaseline(sgData, sgFilterNew);
+                //  2) Choose alpha, then subtract at the output ----------
+                double[] stdRatio = new double[sgData.length];
+                Utility ut = new Utility();
+                for (int i = 0; i < sgData.length; i++) {
+                    stdRatio[i] = ut.calculateStd(Arrays.stream(sgData[i]).boxed().collect(Collectors.toCollection(ArrayList::new)))
+                            / ut.calculateStd(Arrays.stream(polySubData[i]).boxed().collect(Collectors.toCollection(ArrayList::new))) + Math.ulp(1.0);
+                }
+                double medRatio = ut.medianDouble(Arrays.stream(stdRatio).boxed().collect(Collectors.toCollection(ArrayList::new)));
+                // Piecewise safeguard
+                double alpha = 0.3;
+                if (medRatio < 0.90)
+                    alpha = 1;
+                else if (medRatio < 0.97)
+                    alpha = 0.6;
+//                double zz = polySubData[0][5009];
+//                double zz2 = sgData[0][5009];
+                for (int i = 0; i < sgData.length; i++) {
+                    for (int e = 0; e < sgData[i].length; e++)
+                        sgData[i][e] = polySubData[i][e] - alpha * sgData[i][e];
+                }
             }else {
                 sgData = polySubData;
             }
             upt = null;
-            polySubData = null;
+//            polySubData = null;
             boolean[] foundNoise = filters.conditionalNotchFiltered(sgData);
             finalData = new double[dataArray.length][dataArray[0].length];
+            calculationData = new double[finalData.length][finalData[0].length];
             for (int i = 0; i < dataArray.length; i++) {
                 if (foundNoise[i]) {
                     // FinalData is NotchFilteredData, if noise found
                     System.out.println("Applying 50/60 Hz Notch Filter for Lead_"+i+"...");
-                    finalData[i] = filters.notch_filter_butterworthNew_Individual(sgData[i], Fs);
+                    calculationData[i] = filters.notch_filter_butterworthNew_Individual(sgData[i], Fs);
+                    finalData[i] = filters.notchFilterButterworthNewIndividualQualityFactorOne(sgData[i], Fs);
                 } else {
+                    calculationData[i] = sgData[i];
                     finalData[i] = sgData[i];
                 }
             }
             sgData = null;
+
 //            String fldrOut = "D:\\RAHUL\\DownloadsRahul\\fldrOut";
 //            writeFile(finalData, fldrOut, "Vishal_Medanta_raw.txt","a");
-
 //            LoaderHelper ldh = new LoaderHelper();
-//            ldh.viewData(finalData);
+//            ldh.viewData(finalData[0]);
+
             boolean flag = false;
-            for (int lead = 0; lead < finalData.length; lead++) {
-                QrsInfo qrsInfo = checkForPanTompkins(finalData[lead], Fs, filters, lead);
+
+            // Commented on 13 Nov 2025
+//            for (int lead = 0; lead < finalData.length; lead++) {
+//                QrsInfo qrsInfo = checkForPanTompkins(finalData[lead], Fs, filters, lead);
+//                for(boolean x : qrsInfo.getQrsPresent())
+//                {
+//                    if (x) {
+//                        flag = x;
+//                        break;
+//                    }
+//                }
+//            }
+
+            // Below code updated on 13 Nov 2025
+            for (int lead = 0; lead < calculationData.length; lead++) {
+                QrsInfo qrsInfo = checkForPanTompkins(calculationData[lead], Fs, filters, lead);
                 for(boolean x : qrsInfo.getQrsPresent())
                 {
                     if (x) {
@@ -104,10 +152,12 @@ public class SignalProcessing {
                     }
                 }
             }
-            double[][] calculationData = new double[finalData.length][finalData[0].length];
-            for (int i = 0; i < finalData.length; i++) {
-                calculationData[i] = filters.movingAverageForWindowSizeOfTwo(finalData[i]);
+            for (int i = 0; i < calculationData.length; i++) {
+                calculationData[i] = filters.movingAverageForWindowSizeOfTwo(calculationData[i]);
             }
+
+//            LoaderHelper ldh = new LoaderHelper();
+//            ldh.viewData(calculationData);
             filters = null;
             System.gc();
             PointDetectionNew pt = new PointDetectionNew(finalData);
@@ -122,10 +172,10 @@ public class SignalProcessing {
                 String arrhythmia = "Since valid point detection has not been performed, the data is not qualified for arrhythmia detection.";
                 String stemi = "Since valid point detection has not been performed, the data is not qualified for stemi detection.";
                 String ischemia = "Since valid point detection has not been performed, the data is not qualified for ischemia detection.";
-                onResultCompleteListener.onCompletedLead2MetaData(twelveLeadEcgData, hashMap, arrhythmia, stemi, ischemia);
+                arrhythmia += "\n "+stemi+"\n "+ischemia;
+                onResultCompleteListener.onCompletedLead2MetaData(twelveLeadEcgData, hashMap, arrhythmia);
                 return;
             }
-            // Give fileName so text file could be saved.
             pt.findPointsForAllColumns(Fs, onResultCompleteListener, calculationData);
 
         } catch (Exception e) {

@@ -62,13 +62,13 @@ public class IschemiaDetection {
                 //  mean(ST_all <= -0.15, 'omitnan') > 0.5;
                 //  perLead.ST_Persistent(i) = mean(ST_all <= -0.15, 'omitnan') > 0.5;
                 stPersistent[i] = ut.mean( stemiData.getSTElevationMv().stream().mapToInt( x ->
-                        (x <= -0.15) ? 1 : 0).toArray()) > 0.5;
+                        (x <= -0.12) ? 1 : 0).toArray()) > 0.5;
                 stPersistentStrong[i] = ut.mean( stemiData.getSTElevationMv().stream().mapToInt( x ->
-                        (x <= -0.15) ? 1 : 0).toArray()) > 0.5;
+                        (x <= -0.16) ? 1 : 0).toArray()) > 0.5;
             }
             if (! stemiData.getTAmplitude().isEmpty())
                 tPersistentInverse[i] = ut.mean( stemiData.getTAmplitude().stream().mapToInt( x ->
-                        (x <= -0.20) ? 1 : 0).toArray()) > 0.5;
+                        (x <= -0.13) ? 1 : 0).toArray()) > 0.5;
         }
 
         //  ------ Territory-level persistence ---------
@@ -284,21 +284,18 @@ public class IschemiaDetection {
         else {
             resultStr += "No ischemia pattern flagged.";
         }
-        if (!uniqueTerritoriesAllDataList.isEmpty()) {
-            for (int i = 0; i < uniqueTerritories.size(); i++) {
-                resultStr += " \n "+uniqueTerritoriesAllDataList.get(i).getTerritory()+" : horiz/down depressed= " +
-                        uniqueTerritoriesAllDataList.get(i).getnHorizDownDepressed() + " , deep <= -0.10mV = "+
-                        (uniqueTerritoriesAllDataList.get(i).isHasDeepDepressed()? "Yes" : "No") + ", T-inv= " +
-                        uniqueTerritoriesAllDataList.get(i).getnTInverted();
-            }
-        }
-        //  if strlength(rationale) > 0
-        //    lines(end+1) = "Evidence -> " + rationale;
-        //end
-        if (!rationale.isEmpty())
-            resultStr += " \n \n" + rationale;
-//        System.out.println("------------------------- Ischemia Final Result --------------------------------");
-//        System.out.println(resultStr);
+        // Below 10 lines are commented to not show extra details in Ischemia Result, below code is not commented in Raw java code.
+
+//        if (!uniqueTerritoriesAllDataList.isEmpty()) {
+//            for (int i = 0; i < uniqueTerritories.size(); i++) {
+//                resultStr += " \n "+uniqueTerritoriesAllDataList.get(i).getTerritory()+" : horiz/down depressed= " +
+//                        uniqueTerritoriesAllDataList.get(i).getnHorizDownDepressed() + " , deep <= -0.10mV = "+
+//                        (uniqueTerritoriesAllDataList.get(i).isHasDeepDepressed()? "Yes" : "No") + ", T-inv= " +
+//                        uniqueTerritoriesAllDataList.get(i).getnTInverted();
+//            }
+//        }
+//        if (!rationale.isEmpty())
+//            resultStr += " \n \n" + rationale;
         return resultStr;
     }
 

@@ -151,6 +151,8 @@ public class Filters {
         double f50Hz = 50;
         double f60Hz = 60;
         double q = 0.5;       // Quality factor (adjustable for better filtering)
+        // Q Changed on 15 Oct 2025 to 1 from 0.5
+//        double q = 1;       // Quality factor (adjustable for better filtering)
         double bw = f50Hz / q;
         double[] wN = new double[2];
         wN[0] = (f50Hz - (bw/2)) / (Fs/2);
@@ -176,6 +178,37 @@ public class Filters {
         return filtered60Hz;
     }
 
+    //    Updated on 13 Nov 2025
+    public double[] notchFilterButterworthNewIndividualQualityFactorOne(double[] data, double Fs) {
+        double f50Hz = 50;
+        double f60Hz = 60;
+        double q = 1;       // Quality factor (adjustable for better filtering)
+        // Q Changed on 15 Oct 2025 to 1 from 0.5
+//        double q = 1;       // Quality factor (adjustable for better filtering)
+        double bw = f50Hz / q;
+        double[] wN = new double[2];
+        wN[0] = (f50Hz - (bw/2)) / (Fs/2);
+        wN[1] = (f50Hz + (bw/2)) / (Fs/2);
+//        System.out.println(wN[0] +"            "+wN[1]);
+        ArrayList<double[]> listArr = butterFilterNew(1, wN, "stop");
+        double[] b50 = listArr.get(0);
+        double[] a50 = listArr.get(1);
+//        LoaderHelper ldh = new LoaderHelper();
+//        ldh.viewData(b50);
+        listArr.clear();
+        bw = f60Hz / q;
+        wN[0] = (f60Hz - (bw/2)) / (Fs/2);
+        wN[1] = (f60Hz + (bw/2)) / (Fs/2);
+        listArr = butterFilterNew(1, wN, "stop");
+        double[] b60 = listArr.get(0);
+        double[] a60 = listArr.get(1);
+        // let
+//        double[] b50 = {0.5792, 0.4208, 0};
+//        double[] a50 = {1,0,0};
+        double[] filtered50Hz = customFiltFiltNew(b50, a50, data);
+        double[] filtered60Hz = customFiltFiltNew(b60, a60, filtered50Hz);
+        return filtered60Hz;
+    }
 
 
     public ArrayList<double[]> butterFilter(int order, double[] wN, String type) {
@@ -650,6 +683,18 @@ public class Filters {
         }
         return ecgFilteredAfterFastSavitzky;
     }
+
+//  Updated on 29 Oct 2025
+    public double[][] fastSavitzkyGolayBaseline(double[][] ecgData, double[] sgFilter) {
+        double[][] ecgFilteredAfterFastSavitzky = new double[ecgData.length][ecgData[0].length];
+        for (int col = 0; col < ecgData.length; col++) {
+//        for (int col = 0; col < 1; col++) {
+            double[] baseLine = customConvSame(ecgData[col], sgFilter);
+//            ecgFilteredAfterFastSavitzky[col] = baseLineSubtractionEcg(ecgData[col], baseLine);
+            ecgFilteredAfterFastSavitzky[col] = baseLine;
+        }
+        return ecgFilteredAfterFastSavitzky;
+    }
     
     public double[] baseLineSubtractionEcg(double[] ecgColumn, double[] baseLine){
         double[] ecgColumnNew = new double[ecgColumn.length];
@@ -731,7 +776,9 @@ public class Filters {
         FastFourierTransform fftObj = new FastFourierTransform(500);
         MatlabInbuiltFunctions mf = new MatlabInbuiltFunctions();
         double thresholdAmplitude = 5 * 10000;   // arbitrary, adjust per your data
-        double snrThreshold5060 = 12.5;
+//        double snrThreshold5060 = 12.5;
+//        double snrThreshold5060 = 5;
+        double snrThreshold5060 = 8;
         double frequencyRange = 0.5;    // +/- 0.5 Hz around 50 or 60
         boolean foundNoise = false;
         boolean[] foundNoiseArray = new boolean[ecg.length];
@@ -835,6 +882,57 @@ public class Filters {
         return peakValueAndFoundPeakFlag;
     }
 
+    // Created on 30 Oct 2025, earlier we were using above hasNearPeakFrequency() function
+    public double[] hasNearPeakFrequencyForPointFiveHz30Oct2025(double[] freqAxis, double[] magFft, double centerFrequency, double bandwidth, double thresholdAmplitude) {
+        double lowFrequency = centerFrequency - bandwidth;
+        double highFrequency  = centerFrequency + bandwidth;
+        LoaderHelper ldh = new LoaderHelper();
+        double foundPeakFlag;
+        double peakValue = -1;
+        double[] peakValueAndFoundPeakFlag= new double[2];
+        Utility ut = new Utility();
+//        System.out.println(lowFrequency +"      "+highFrequency);
+        ArrayList<Integer> list = new ArrayList<Integer>();
+        for (int i = 0; i < freqAxis.length; i++) {
+            if (freqAxis[i] >= lowFrequency && freqAxis[i] <= highFrequency)
+                list.add(i);
+        }
+        if (list.isEmpty())
+        {
+            foundPeakFlag = 0.0;
+            peakValueAndFoundPeakFlag[0] = 0;
+            peakValueAndFoundPeakFlag[1] = -1;
+            return peakValueAndFoundPeakFlag;
+        }
+        double[] regionAmp = new double[list.size()];
+        for (int j = 0; j < list.size(); j++) {
+            regionAmp[j] = magFft[list.get(j)];
+        }
+//        ldh.viewData(regionAmp);
+        peakValue = ut.findMax(regionAmp);
+
+//        double[] magX = list.stream().mapToDouble(e-> magFft[e]).toArray();
+        ArrayList<Double> magX = new ArrayList<Double>();
+        int j = 0;
+        for (int i = 0; i < magFft.length; i++) {
+            if ( j < list.size() && i == list.get(j) ) {
+                j++;
+            } else
+                magX.add(magFft[i]);
+        }
+        double noiseFloor = ut.findMean(magX);
+        double snr = peakValue / (noiseFloor + Math.ulp(1.0));
+//        if ( (peakValue > thresholdAmplitude) && ((snr >= 2.5 && snr <= 6) || (snr >= snrThreshold5060)) )
+        if ( (peakValue > thresholdAmplitude)  )
+            foundPeakFlag = 1;
+        else
+            foundPeakFlag = 0.0;
+        peakValueAndFoundPeakFlag[0] = foundPeakFlag;
+        peakValueAndFoundPeakFlag[1] = peakValue;
+        return peakValueAndFoundPeakFlag;
+    }
+
+
     //    15 July 2025
     public double[] hasNearPeakFrequency12July2025(double[] freqAxis, double[] magFft, double centerFrequency, double bandwidth,double thresholdAmplitude, double snrThreshold5060) {
         double lowFrequency = centerFrequency - bandwidth;
@@ -875,7 +973,9 @@ public class Filters {
         }
         double noiseFloor = ut.findMean(magX);
         double snr = peakValue / (noiseFloor + Math.ulp(1.0));
-        if ( (peakValue > thresholdAmplitude) && ((snr >= 2.5 && snr <= 6) || (snr >= snrThreshold5060)) )
+//        if ( (peakValue > thresholdAmplitude) && ((snr >= 2.5 && snr <= 6) || (snr >= snrThreshold5060)) )
+//        if ( (peakValue > thresholdAmplitude) && ((snr >= 5 && snr <= 6) || (snr >= snrThreshold5060)) )
+        if ( (peakValue > thresholdAmplitude) &&  (snr >= snrThreshold5060) )
             foundPeakFlag = 1;
         else
             foundPeakFlag = 0.0;

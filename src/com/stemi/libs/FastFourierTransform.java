@@ -85,7 +85,7 @@ public class FastFourierTransform {
         double[] f = new double[numPoints];
         for (int i = 1; i < numPoints; i++) {
             f[i] = (samplingRate * i)/ N2;
-            System.out.println(f[i]);
+//            System.out.println(f[i]);
         }
         double[][] p1_Freq = {f, P1};
        return p1_Freq;
@@ -315,6 +315,18 @@ public class FastFourierTransform {
         return absArr;
     }
 
+    public double[] absoluteOfFFT(double[] fftReal, double[] fftImag)
+    {
+        double[] absArr = new double[fftReal.length];
+        double customReal = 0;
+        double customImag = 0;
+        for (int i = 0; i < fftReal.length; i++) {
+            customReal = fftReal[i];
+            customImag = fftImag[i];
+            absArr[i] = Math.sqrt(customReal * customReal + customImag * customImag) ;
+        }
+        return absArr;
+    }
 
 
 

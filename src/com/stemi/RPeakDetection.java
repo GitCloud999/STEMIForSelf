@@ -215,7 +215,7 @@ public class RPeakDetection {
         }
         ArrayList<Integer> refineRPeaksList = refineRPeaks(ecgFiltered, rPeaksList, fs, ut);
         //  Enforce Physiological RR Interval
-        double minRR = Math.round(0.20 * fs);       //Minimum RR interval (250 ms for SVT)
+        double minRR = Math.round(0.25 * fs);       //Minimum RR interval (250 ms for SVT)
         rPeaksList = enforceRefractoryPeriod(refineRPeaksList, ecgFiltered, minRR);
         //  fallback #1: very low-amp or wide QRS
         if (rPeaksList.isEmpty())

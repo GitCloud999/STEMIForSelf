@@ -672,19 +672,21 @@ public class Utility {
     }
 
     public double median (double[] arr) {
-        Arrays.sort(arr);
-        int n = arr.length;
+        double[] newArr = Arrays.copyOf(arr, arr.length);
+        Arrays.sort(newArr);
+        int n = newArr.length;
         if (n % 2 == 0)
-            return ( arr[n/2 - 1] + arr[n/2]) / 2.0;
-        return arr[n/2];
+            return ( newArr[n/2 - 1] + newArr[n/2]) / 2.0;
+        return newArr[n/2];
     }
 
     public double median (int[] arr) {
-        Arrays.sort(arr);
-        int n = arr.length;
+        int[] newArr = Arrays.copyOf(arr, arr.length);
+        Arrays.sort(newArr);
+        int n = newArr.length;
         if (n % 2 == 0)
-            return ( arr[n/2 - 1] + arr[n/2]) / 2.0;
-        return arr[n/2];
+            return ( newArr[n/2 - 1] + newArr[n/2]) / 2.0;
+        return newArr[n/2];
     }
 
     public double median(ArrayList<Integer> list) {

@@ -37,8 +37,8 @@ public class PointDetectionNew {
         HashMap<String, Double> map = new HashMap<String, Double>();
         ArrayList<HashMap<String, Double>> hashMapArrayList = new ArrayList<HashMap<String, Double>>();
         CardiacStruct cardiacStruct = new CardiacStruct();
-//        for (int leadIdx = group[0]; leadIdx <= group[group.length - 1]; leadIdx++) {
-        for (int leadIdx = 0; leadIdx < 1; leadIdx++) {
+        for (int leadIdx = group[0]; leadIdx <= group[group.length - 1]; leadIdx++) {
+//        for (int leadIdx = 5 ; leadIdx < 6; leadIdx++) {
             HashMap<String, Double> mapLocal = new HashMap<String, Double>();
             ecg = calculationData[group[leadIdx - group[0]]];
 //            ArrayList<Integer> rPeaksList = rPeakDetection.improvedRPeakDetection(ecg, fs);
@@ -56,15 +56,16 @@ public class PointDetectionNew {
 //                AllCalculatedData allData = pqst.detectPQSTFeatures(ecg, rPeaks, baseLine, fs);
 //                AllCalculatedData allData = pqstNew.detectPQSTFeatures(ecg, rPeaks, baseLine, fs);
                 AllCalculatedDataNew allData = pqstNew.detectPQSTFeatures(ecg, rPeaks, baseLine, fs);
-                Features features = allData.features;
-                Amplitude amplitude = allData.amplitude;
+//                Features features = allData.features;
+//                Amplitude amplitude = allData.amplitude;
                 DurationNew duration = allData.duration;
+                ArrayList<Integer> qrsDuration = duration.QRS;
                 double[] rrIntervals = allData.rrIntervals;
 //                double[] heartRate = allData.heartRate;
 //                ArrayList<Double> stElevation = allData.stElevation;
 //            allData.displayAllFeaturesData(features);
 //            allData.displayAllAmplitudeData(amplitude);
-            allData.displayAllDurationData(duration);
+//            allData.displayAllDurationData(duration);
 //            allData.displayAllStElevation(allData.stElevation);
 //                allData.displayAllStartAndEndIndices(allData.startAndEndIndexOfPoints);
 //                System.out.println("Amplitude P size "+ Arrays.toString(allData.amplitude.P.Size()));
@@ -130,13 +131,14 @@ public class PointDetectionNew {
 //            onResultCompleteListener.onCompletedLead2MetaData(twelveLeadEcgData, map);
             ArrhythmiaDetection arrhythmia = new ArrhythmiaDetection();
 //            arrhythmiaResult = arrhythmia.detectArrhythmia(cardiacStruct, finalData, fs, map);
+            arrhythmiaResult = arrhythmia.detectArrhythmia(cardiacStruct, calculationData, fs, map);
         } catch (Exception e) {
             System.out.println("\033[1mError *** Issue in Arrhythmia Detection ---- \033[0m");
             e.printStackTrace();
         }
         try {
             StemiDetection stemi = new StemiDetection();
-//            stemi.detectStemi(cardiacStruct, fs, onResultCompleteListener, twelveLeadEcgData, map, ut, arrhythmiaResult);
+            stemi.detectStemi(cardiacStruct, fs, onResultCompleteListener, twelveLeadEcgData, map, ut, arrhythmiaResult);
         } catch (Exception e) {
             System.out.println("\033[1mError *** Issue in STEMI Detection ---- \033[0m");
             e.printStackTrace();

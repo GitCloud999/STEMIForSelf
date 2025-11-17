@@ -10,7 +10,6 @@ public interface OnResultCompleteListener {
     void onComplete(int[] rPeaks, double[] rrIntervals, int leadIdx, AllCalculatedDataNew allData, ArrayList<ArrayList<Double>> summaryList);
     void rPeaksLessThanTwo(int[] rPeaks, int leadIdx);
     void onFailed(String message);
-    void onCompletedLead2MetaData(TwelveLeadEcgData twelveLeadEcgData, HashMap<String, Double> hashMap, String arrhythmiaSummary,
-                                  String stemiResult, String ischemiaResult);
+    void onCompletedLead2MetaData(TwelveLeadEcgData twelveLeadEcgData, HashMap<String, Double> hashMap, String finalSummary);
 
 }

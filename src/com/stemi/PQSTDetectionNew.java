@@ -603,8 +603,6 @@ public class PQSTDetectionNew {
             amplitude.R.addColumnThreeValue(rRawAmplitude * amplitudeToMv * mvToMm);
             //    Detect Q wave
             try {
-//                double roundTemp =  Math.round(0.06 * fs);
-//                qStart = (int) Math.max(0, rIdx - Math.round(0.06 * fs));
                 qStart = (int) Math.max(0, rIdx - Math.round(0.040 * fs));
                 qEnd = (int) Math.max(0, rIdx - Math.round(0.01 * fs));         // 10 ms before R
                 if (qEnd > qStart) {
@@ -624,7 +622,7 @@ public class PQSTDetectionNew {
                     ArrayList<Integer> zcMinList = new ArrayList<>();
                     if (zcMinArray.length > 0) {
                         for (int j = 0; j < zcMinArray.length; j++) {
-                            boolean keep = (zcMinArray[j] >= 2) && zcMinArray[j] <= segQ.length - 1;
+                            boolean keep = (zcMinArray[j] >= 1) && zcMinArray[j] <= segQ.length - 1;
                             if (keep)
                                 zcMinList.add(zcMinArray[j]);
                         }
@@ -634,10 +632,14 @@ public class PQSTDetectionNew {
                         final int qStartFinal  = qStart;
                         ArrayList<Integer> candAbs = zcMinList.stream().map(zcMin -> (zcMin + qStartFinal )).
                                 collect(Collectors.toCollection(ArrayList::new));
-                        qIdx0 = ut.findMinInIntegerList(candAbs);
+//                        qIdx0 = ut.findMinInIntegerList(candAbs);
+                        double[] ecgCandAbs = candAbs.stream().mapToDouble(e -> ecg[e]).toArray();
+                        int k = ut.findMinIndex(ecgCandAbs);
+                        qIdx0 = candAbs.get(k);
+
                     }
                     else {
-                        int kMin = ut.findMinIndex(Arrays.stream(segQ).toArray());
+                        int kMin = ut.findMinIndexAbsolute(Arrays.stream(dQ).toArray());
                         qIdx0 = qStart + kMin;
                     }
                     if ((qIdx0 == -1) || (qIdx0 < qStart) || (qIdx0 > qEnd) ) {
@@ -652,8 +654,6 @@ public class PQSTDetectionNew {
                     } else
                         qIdx = qIdx0;
 
-
-                    int d = 1;
 
                 }
                 if (qIdx != -1) {
@@ -779,7 +779,11 @@ public class PQSTDetectionNew {
                             features.P.addIndex(pIdxFixed);
                             features.P.addValue(ecg[pIdxFixed]);
                             pStartLocal = Math.max(0, pIdxFixed - (int) Math.round(0.04 * fs));
-                            pEndLocal = Math.min(ecg.length - 1, pIdxFixed + (int) Math.round(0.05 * fs));
+                            pEndLocal = Math.min(ecg.length , pIdxFixed + (int) Math.round(0.05 * fs));
+
+                            startAndEndIndexOfPoints.pStart.set(startAndEndIndexOfPoints.getPStartSize() -1 , pStartLocal);
+                            startAndEndIndexOfPoints.pEnd.set(startAndEndIndexOfPoints.getPEndSize() - 1, pEndLocal);
+
                             double pRawAmplitude = ecg[pIdxFixed] - baseLine;
                             amplitude.P.addColumnOneValue(pRawAmplitude);
                             amplitude.P.addColumnTwoValue(pRawAmplitude * amplitudeToMv);
@@ -978,6 +982,7 @@ public class PQSTDetectionNew {
             else
                 qrsOnsetIdx = Math.max(0, rIdx - (int) Math.round(0.012 * fs));
             int nextPStartIndex = -1;
+//            System.out.println("i ==== " + i);
             HashMap<String, Object> isoElectricData = detectIsoElectricPerBeat( ecg, fs, pEndLocal, nextPStartIndex, qrsOnsetIdx, startAndEndIndexOfPoints.getTEnd(startAndEndIndexOfPoints.getTEndSize()-1), amplitudeToMv);
             // If iso missing, fall back to baseline for amplitude reference:
             double refVal = baseLine;
@@ -1056,8 +1061,6 @@ public class PQSTDetectionNew {
                         amplitude.J.addColumnTwoValue(jRawAmplitude * amplitudeToMv);
                         amplitude.J.addColumnThreeValue(jRawAmplitude * amplitudeToMv * mvToMm);
 //                        Calculate ST elevation
-                        stElevation.add(jRawAmplitude * amplitudeToMv);
-
                         //  Concavity of ST segemnt elevation check
                         //---- ST at J, J+60 ms, J+80 ms (mV) ----
                         int off60 = (int) Math.round(0.060 * fs);
@@ -1067,6 +1070,7 @@ public class PQSTDetectionNew {
                         double stJMv = (ecg[jIdx] - refVal) * amplitudeToMv;
                         double stJ60Mv = (ecg[idxJ60] - refVal) * amplitudeToMv;
                         double stJ80Mv = (ecg[idxJ80] - refVal) * amplitudeToMv;
+                        stElevation.add( (double) Math.round(stJMv * 10000) / 10000);
                         int tOnForSt = -1;
                         if (!startAndEndIndexOfPoints.tStart.isEmpty() ) {
                             int tStart = startAndEndIndexOfPoints.getTStart(startAndEndIndexOfPoints.getTStartSize() - 1);
@@ -1206,107 +1210,7 @@ public class PQSTDetectionNew {
 
 
 
-    public int detectJPoint(double[] ecg, int sIdx, double fs, StartAndEndIndexOfPoints startAndEndIndexOfPoints) {
-        //  Define the search range for J-point (10–60 ms after S-point)
-//        search_range = round(0.04 * fs):round(0.06 * fs); % 10–20 ms
-//        int searchStart = (int) Math.round(0.02 * fs);
-//        int tempEnd = (int) Math.round(0.06 * fs);
-//        com.arrthymia.LoaderHelper ldh = new com.arrthymia.LoaderHelper();
-//        ldh.viewData(ecg);
-        if (sIdx == -1 || sIdx >= ecg.length)
-            return -1;
-        boolean hasPositive = false, hasNegative = false;
-        int jPoint = -1;
-        double[] leftSlope, rightSlope;
-        double amplitudeToMv = 1.0/(double) 6250;
-        int searchStart = sIdx + (int) Math.round(0.004 * fs);
-        int searchEnd = sIdx + (int) Math.round(0.08 * fs);
-        Filters filters = new Filters();
-        int idxInf = -1;
-        int[] searchRange = new int[searchEnd - searchStart +1];
-//        search_end   = min(max(search_end,1),   length(ecg));
-        searchStart = Math.min(Math.max(searchStart, 0), ecg.length - 1);
-        searchEnd = Math.min(Math.max(searchEnd, 0), ecg.length - 1);
-        if (searchEnd <= searchStart)
-            return -1;
-        int[] jRange = new int[searchEnd - searchStart +1];
-        double[] rawSlopes = new double[jRange.length-1];
-        for (int i = 0; i < jRange.length; i++) {
-            jRange[i] = searchStart + i;
-        }
-        double[] segRaw = new double[jRange.length];
-        for (int i = 0; i < segRaw.length; i++) {
-            segRaw[i] = ecg[jRange[i]];
-        }
-        //  Detect inflection point or minimum slope change
-//        for (int i = 1; i < jRange.length; i++) {
-//            rawSlopes[i-1] = Math.abs(ecg[jRange[i]] - ecg[jRange[i-1]]);
-//            if (!hasPositive && rawSlopes[i] > 0)
-//                hasPositive = true;
-//            if (!hasNegative && rawSlopes[i] < 0)
-//                hasNegative = true;
-//        }
-        rawSlopes = ut.differentaition(segRaw);
-        hasPositive = ut.checkWhetherAnyArrayValueGreaterThanZero(rawSlopes);
-        hasNegative = ut.checkWhetherAnyArrayValueLessThanZero(rawSlopes);
-        if ( hasPositive && hasNegative){
-            int winMs = 15;
-            int winPts = (int) Math.max(2, Math.round(((double ) winMs/1000)* fs));
-            double[] bMov = new double[winPts];
-            Arrays.fill(bMov, (double) 1/winPts);
-            double[] segSm = filters.customFiltFiltNew(bMov, new double[]{1}, segRaw);
-            double[] slopesSm = ut.differentaition(segSm);
-            ArrayList<Integer> posIdx = ut.findIndexWhereValueIsGreaterThanZero(slopesSm);
-            if (posIdx.size() >= 12)
-                idxInf = posIdx.get((posIdx.size() - 1) - 11 );
-            else if (!posIdx.isEmpty())
-                idxInf = posIdx.get(posIdx.size()-1);
-            else
-                idxInf = ut.findMinIndexAbsolute(slopesSm);
-        } else
-            idxInf = ut.findMinIndexAbsolute(rawSlopes);
-        //  4) Map to global index
-        jPoint = jRange[idxInf];
-        // 5) Pattern-1/4/5 check → **narrow-window** fallback
-            //  pat1: all-positive on both sides
-            //  pat4: right has +,–,+
-            // pat5: left has +,–,+
-        leftSlope = ut.fillDataIntoArray(0, idxInf-1, rawSlopes);
-        rightSlope = ut.fillDataIntoArray(idxInf, rawSlopes.length-1, rawSlopes);
-        boolean pat1 = ut.checkWhetherAllArrayValueGreaterThanZero(leftSlope) &&
-                ut.checkWhetherAllArrayValueGreaterThanZero(rightSlope);
-        boolean pat4 = ut.checkWhetherAnyArrayValueGreaterThanZero(rightSlope) &&
-                ut.checkWhetherAnyArrayValueLessThanZero(rightSlope);
-        boolean pat5 = ut.checkWhetherAnyArrayValueGreaterThanZero(leftSlope) &&
-                ut.checkWhetherAnyArrayValueLessThanZero(leftSlope);
-        if (pat1 || pat4 || pat5) {
-        //      NARROW WINDOW: 10–50 ms after S, pick min-abs slope there ---
-            int searchStart2 = sIdx + (int) Math.round(0.01 * fs);
-            int searchEnd2 = sIdx + (int) Math.round(0.05 * fs);
-            searchStart2 = Math.max(0, Math.min(searchStart2, ecg.length-1));
-            searchEnd2 = Math.max(0, Math.min( searchEnd2, ecg.length-1));
-            if (searchEnd2 > searchStart2) {
-                int[] jr2 = new int[searchEnd2 - searchStart2 + 1];
-                double[] jr2Ecg = new double[searchEnd2 - searchStart2 + 1];
-                for (int i = 0; i < jr2.length; i++) {
-                    jr2[i] = searchStart2 + i;
-                    jr2Ecg[i] = ecg[jr2[i]];
-                }
-                double[] slopes2 = ut.differentaition(jr2Ecg);
-                int k = ut.findMinIndexAbsolute(slopes2);
-                jPoint = jr2[k] - 5;
-            }
-        }
-    //  6) Depressed override: if both S & J < 0 mV and nearly equal → J = S
-        double sAmplitude = ecg[sIdx] * amplitudeToMv;
-        double jAmplitude = ecg[jPoint] * amplitudeToMv;
-        double tol = 0.05;
-        if (sAmplitude < 0 && jAmplitude < 0 && Math.abs(jAmplitude - sAmplitude) <= tol)
-            jPoint = sIdx;
-        //  7) Clamp final index
-        jPoint = Math.max(0, Math.min(jPoint, ecg.length-1));
-        return jPoint;
-    }
+
 
     public int findLocalMin(double[] ecg, int startIdx, int endIdx) {
         // Ensure indices are within bounds
@@ -1342,7 +1246,7 @@ public class PQSTDetectionNew {
         double dt = 1/ fs;
         double[] dSeg = Arrays.stream(ut.differentaition(segment)).map(e -> e / dt).toArray();
         //  Zero-crossings (indices relative to 'segment'):
-        int[] zcMin = IntStream.range(0, dSeg.length - 1).filter( e -> (
+        int[] zcMin = IntStream.range(1, dSeg.length - 1 ).filter( e -> (
                 (dSeg[e] < 0) && (dSeg[e+1] >= 0) && (dSeg[e+1] >= minOff) )
         ).toArray();   //   valleys
         int[] zcMax = IntStream.range(0, dSeg.length - 1).filter( e -> (
@@ -1431,6 +1335,108 @@ public class PQSTDetectionNew {
         */
     }
 
+    public int detectJPoint(double[] ecg, int sIdx, double fs, StartAndEndIndexOfPoints startAndEndIndexOfPoints) {
+        //  Define the search range for J-point (10–60 ms after S-point)
+//        search_range = round(0.04 * fs):round(0.06 * fs); % 10–20 ms
+//        int searchStart = (int) Math.round(0.02 * fs);
+//        int tempEnd = (int) Math.round(0.06 * fs);
+//        com.arrthymia.LoaderHelper ldh = new com.arrthymia.LoaderHelper();
+//        ldh.viewData(ecg);
+        if (sIdx == -1 || sIdx >= ecg.length)
+            return -1;
+        boolean hasPositive = false, hasNegative = false;
+        int jPoint = -1;
+        double[] leftSlope, rightSlope;
+        double amplitudeToMv = 1.0/(double) 6250;
+        int searchStart = sIdx + (int) Math.round(0.004 * fs);
+        int searchEnd = sIdx + (int) Math.round(0.08 * fs);
+        Filters filters = new Filters();
+        int idxInf = -1;
+        int[] searchRange = new int[searchEnd - searchStart +1];
+//        search_end   = min(max(search_end,1),   length(ecg));
+        searchStart = Math.min(Math.max(searchStart, 0), ecg.length - 1);
+        searchEnd = Math.min(Math.max(searchEnd, 0), ecg.length - 1);
+        if (searchEnd <= searchStart)
+            return -1;
+        int[] jRange = new int[searchEnd - searchStart +1];
+        double[] rawSlopes = new double[jRange.length-1];
+        for (int i = 0; i < jRange.length; i++) {
+            jRange[i] = searchStart + i;
+        }
+        double[] segRaw = new double[jRange.length];
+        for (int i = 0; i < segRaw.length; i++) {
+            segRaw[i] = ecg[jRange[i]];
+        }
+        //  Detect inflection point or minimum slope change
+//        for (int i = 1; i < jRange.length; i++) {
+//            rawSlopes[i-1] = Math.abs(ecg[jRange[i]] - ecg[jRange[i-1]]);
+//            if (!hasPositive && rawSlopes[i] > 0)
+//                hasPositive = true;
+//            if (!hasNegative && rawSlopes[i] < 0)
+//                hasNegative = true;
+//        }
+        rawSlopes = ut.differentaition(segRaw);
+        hasPositive = ut.checkWhetherAnyArrayValueGreaterThanZero(rawSlopes);
+        hasNegative = ut.checkWhetherAnyArrayValueLessThanZero(rawSlopes);
+        if ( hasPositive && hasNegative){
+            int winMs = 15;
+            int winPts = (int) Math.max(2, Math.round(((double ) winMs/1000)* fs));
+            double[] bMov = new double[winPts];
+            Arrays.fill(bMov, (double) 1/winPts);
+            double[] segSm = filters.customFiltFiltNew(bMov, new double[]{1}, segRaw);
+            double[] slopesSm = ut.differentaition(segSm);
+            ArrayList<Integer> posIdx = ut.findIndexWhereValueIsGreaterThanZero(slopesSm);
+            if (posIdx.size() >= 12)
+                idxInf = posIdx.get((posIdx.size() - 1) - 11 );
+            else if (!posIdx.isEmpty())
+                idxInf = posIdx.get(posIdx.size()-1);
+            else
+                idxInf = ut.findMinIndexAbsolute(slopesSm);
+        } else
+            idxInf = ut.findMinIndexAbsolute(rawSlopes);
+        //  4) Map to global index
+        jPoint = jRange[idxInf];
+        // 5) Pattern-1/4/5 check → **narrow-window** fallback
+        //  pat1: all-positive on both sides
+        //  pat4: right has +,–,+
+        // pat5: left has +,–,+
+        leftSlope = ut.fillDataIntoArray(0, idxInf-1, rawSlopes);
+        rightSlope = ut.fillDataIntoArray(idxInf, rawSlopes.length-1, rawSlopes);
+        boolean pat1 = ut.checkWhetherAllArrayValueGreaterThanZero(leftSlope) &&
+                ut.checkWhetherAllArrayValueGreaterThanZero(rightSlope);
+        boolean pat4 = ut.checkWhetherAnyArrayValueGreaterThanZero(rightSlope) &&
+                ut.checkWhetherAnyArrayValueLessThanZero(rightSlope);
+        boolean pat5 = ut.checkWhetherAnyArrayValueGreaterThanZero(leftSlope) &&
+                ut.checkWhetherAnyArrayValueLessThanZero(leftSlope);
+        if (pat1 || pat4 || pat5) {
+            //      NARROW WINDOW: 10–50 ms after S, pick min-abs slope there ---
+            int searchStart2 = sIdx + (int) Math.round(0.01 * fs);
+            int searchEnd2 = sIdx + (int) Math.round(0.05 * fs);
+            searchStart2 = Math.max(0, Math.min(searchStart2, ecg.length-1));
+            searchEnd2 = Math.max(0, Math.min( searchEnd2, ecg.length-1));
+            if (searchEnd2 > searchStart2) {
+                int[] jr2 = new int[searchEnd2 - searchStart2 + 1];
+                double[] jr2Ecg = new double[searchEnd2 - searchStart2 + 1];
+                for (int i = 0; i < jr2.length; i++) {
+                    jr2[i] = searchStart2 + i;
+                    jr2Ecg[i] = ecg[jr2[i]];
+                }
+                double[] slopes2 = ut.differentaition(jr2Ecg);
+                int k = ut.findMinIndexAbsolute(slopes2);
+                jPoint = jr2[k] - 5;
+            }
+        }
+        //  6) Depressed override: if both S & J < 0 mV and nearly equal → J = S
+        double sAmplitude = ecg[sIdx] * amplitudeToMv;
+        double jAmplitude = ecg[jPoint] * amplitudeToMv;
+        double tol = 0.05;
+        if (sAmplitude < 0 && jAmplitude < 0 && Math.abs(jAmplitude - sAmplitude) <= tol)
+            jPoint = sIdx;
+        //  7) Clamp final index
+        jPoint = Math.max(0, Math.min(jPoint, ecg.length-1));
+        return jPoint;
+    }
+
     private SagittaData stSagittaSimple(double[] ecg, double fs, double baseLine, int jIdx, int tstartIdx, double amplitudeToMv) {
         int n = ecg.length-1;
         SagittaData sagittaData = new SagittaData();
@@ -1469,7 +1475,7 @@ public class PQSTDetectionNew {
         // ---- PR segment: P_Stop+1 ... QRS_onset-1 ----
         HashMap<String, Object> isoElectricData = new HashMap<>();
         int ecgLength = ecg.length, isoIdx = -1;
-        if (pEnd > -1 && qrsOnsetIdx > pEnd) {
+        if (pEnd > -1 && qrsOnsetIdx > pEnd ) {
             int s = Math.max(0, Math.min(pEnd + 1 , ecgLength - 1));
             int e = Math.max(0, Math.min(qrsOnsetIdx - 1 , ecgLength - 1));
             if (e > s) {
@@ -1481,15 +1487,15 @@ public class PQSTDetectionNew {
                 } else {
                     isoIdx = (int) Math.round( (double) (s + e) / 2);
                 }
+                isoElectricData.put("isoIdx", isoIdx);
+                isoElectricData.put("isoValue", ecg[isoIdx]);
+                isoElectricData.put("isoSource", "PR");
+                return isoElectricData;
             }
-            isoElectricData.put("isoIdx", isoIdx);
-            isoElectricData.put("isoValue", ecg[isoIdx]);
-            isoElectricData.put("isoSource", "PR");
-            return isoElectricData;
         }
 
         //  ---- TP segment: T_Stop → next P (if known) else short post-T window ----
-        else if (tEnd > 0) {
+        if (tEnd > 0) {
             int s2 = -1, e2 = -1;
             if (nextPStartIndex != -1 && nextPStartIndex > tEnd) {
                 s2 = Math.max(0, Math.min(tEnd + 1, ecgLength -1));
@@ -1514,7 +1520,7 @@ public class PQSTDetectionNew {
             return isoElectricData;
         }
         //  ---- Fallback: quiet short patch after QRS onset ----
-        else if (qrsOnsetIdx != -1 && qrsOnsetIdx < ecgLength) {
+        if (qrsOnsetIdx != -1 && qrsOnsetIdx < ecgLength) {
             int s3 = -1, e3 = -1;
             s3 = Math.max(0, Math.min(qrsOnsetIdx + (int) Math.round(0.120 * fs), ecgLength - 1));
             e3 = Math.max(0, Math.min(qrsOnsetIdx + (int) Math.round(0.180 * fs), ecgLength - 1));
@@ -1532,13 +1538,16 @@ public class PQSTDetectionNew {
             isoElectricData.put("isoValue", ecg[isoIdx]);
             isoElectricData.put("isoSource", "Fallback");
             return isoElectricData;
-        } else
-        //  Last resort
-        isoIdx = Math.max(0, (int) Math.round((double) ecgLength / 2));
-        isoElectricData.put("isoIdx", isoIdx);
-        isoElectricData.put("isoValue", ecg[isoIdx]);
-        isoElectricData.put("isoSource", "Fallback");
-        return isoElectricData;
+        } else {
+            //  Last resort
+            isoIdx = Math.max(0, (int) Math.round((double) ecgLength / 2));
+            isoElectricData.put("isoIdx", isoIdx);
+            isoElectricData.put("isoValue", ecg[isoIdx]);
+            isoElectricData.put("isoSource", "Fallback");
+            return isoElectricData;
+        }
     }
+
+
 
 }
