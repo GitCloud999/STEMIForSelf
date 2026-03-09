@@ -4,6 +4,7 @@ import com.stemi.dataClasses.*;
 import com.stemi.libs.Utility;
 
 import java.util.*;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 public class ArrhythmiaDetection {
@@ -297,8 +298,8 @@ public class ArrhythmiaDetection {
                             if (candidateIdxs.isEmpty())
                                 continue;
 //                            List<Integer> candidateIdxsNew = candidateIdxs.stream().map(e -> e + prevTEnd).toList();
-                            List<Integer> candidateIdxsNew = candidateIdxs.stream().map(e -> e + leftIdx).toList();
-                            List<Double> candidateAmpsMv = candidateAmps.stream().map(e -> e * ((double) 1 / 6250)).toList();
+                            List<Integer> candidateIdxsNew = candidateIdxs.stream().map(e -> e + leftIdx).collect(Collectors.toList());
+                            List<Double> candidateAmpsMv = candidateAmps.stream().map(e -> e * ((double) 1 / 6250)).collect(Collectors.toList());
                             double pMainAmp = pAmplitudesSecondListArray[j];
                             double tol = 0.10;
                             // similar_candidates and extraP, extraP_counts not defined
